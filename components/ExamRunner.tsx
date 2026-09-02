@@ -2,19 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { saveAnswerAction, revealAnswerAction, submitAttemptAction } from "@/app/actions";
+import { saveAnswerAction, toggleFlagAction, revealAnswerAction, submitAttemptAction } from "@/app/actions";
+import type { SafeQuestion } from "@/lib/types";
 
-const ALPHA = ["ก", "ข", "ค", "ง"];
-
-type SafeQuestion = {
-  id: string;
-  subcategory_id: string;
-  text: string;
-  passage: string | null;
-  choices: string[];
-  position: number;
-  points: number;
-};
+const ALPHA = ["ก", "ข", "ค", "ง", "จ", "ฉ"];
 
 type AnswerState = {
   selected: number | null;
@@ -26,40 +17,39 @@ type AnswerState = {
 
 export default function ExamRunner({
   attemptId,
-  mode,
+  instantReveal,
   startedAt,
   timeLimitMinutes,
-  examSetName,
+  examLabel,
   questions,
   initialAnswers,
+  initialFlags,
 }: {
   attemptId: string;
-  mode: string;
+  instantReveal: boolean;
   startedAt: string;
-  timeLimitMinutes: number;
-  examSetName: string;
+  timeLimitMinutes: number; // 0 = ไม่จำกัดเวลา
+  examLabel: string;
   questions: SafeQuestion[];
-  initialAnswers: Record<string, { selected_index: number | null; is_flagged: boolean }>;
+  initialAnswers: (number | null)[];
+  initialFlags: string[];
 }) {
   const router = useRouter();
-  const isPractice = mode === "practice";
   const [idx, setIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<string, AnswerState>>(() => {
     const init: Record<string, AnswerState> = {};
-    for (const q of questions) {
-      const existing = initialAnswers[q.id];
+    questions.forEach((q, i) => {
       init[q.id] = {
-        selected: existing?.selected_index ?? null,
-        flagged: existing?.is_flagged ?? false,
+        selected: initialAnswers[i] ?? null,
+        flagged: initialFlags.includes(q.id),
         revealed: false,
       };
-    }
+    });
     return init;
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // ── Timer ──
   const deadline = useMemo(() => {
     if (timeLimitMinutes <= 0) return null;
     return new Date(startedAt).getTime() + timeLimitMinutes * 60_000;
@@ -96,19 +86,18 @@ export default function ExamRunner({
   const selectChoice = (choiceIdx: number) => {
     if (ua.revealed) return;
     setAnswers((prev) => ({ ...prev, [q.id]: { ...prev[q.id], selected: choiceIdx } }));
-    saveAnswerAction(attemptId, q.id, choiceIdx, ua.flagged);
+    saveAnswerAction(attemptId, q.id, choiceIdx);
   };
 
   const toggleFlag = () => {
-    const next = !ua.flagged;
-    setAnswers((prev) => ({ ...prev, [q.id]: { ...prev[q.id], flagged: next } }));
-    saveAnswerAction(attemptId, q.id, ua.selected, next);
+    setAnswers((prev) => ({ ...prev, [q.id]: { ...prev[q.id], flagged: !prev[q.id].flagged } }));
+    toggleFlagAction(attemptId, q.id);
   };
 
   const goTo = (i: number) => setIdx(Math.max(0, Math.min(questions.length - 1, i)));
 
   const handleNext = async () => {
-    if (isPractice && ua.selected !== null && !ua.revealed) {
+    if (instantReveal && ua.selected !== null && !ua.revealed) {
       const res = await revealAnswerAction(q.id, attemptId);
       if (res?.error) {
         setError(res.error);
@@ -141,25 +130,25 @@ export default function ExamRunner({
   };
 
   const answeredCount = Object.values(answers).filter((a) => a.selected !== null).length;
-  const nextDisabled = isPractice && ua.selected === null && !ua.revealed;
-  const nextLabel = isPractice && ua.selected !== null && !ua.revealed
-    ? "ตรวจคำตอบ ✅"
-    : idx === questions.length - 1
-      ? "ส่งข้อสอบ 📤"
-      : "ถัดไป ▶";
+  const nextDisabled = instantReveal && ua.selected === null && !ua.revealed;
+  const nextLabel =
+    instantReveal && ua.selected !== null && !ua.revealed
+      ? "ตรวจคำตอบ ✅"
+      : idx === questions.length - 1
+        ? "ส่งข้อสอบ 📤"
+        : "ถัดไป ▶";
 
   const timerColor =
     remaining !== null && remaining <= 300 ? "#dc2626" : remaining !== null && remaining <= 900 ? "#d97706" : "#111827";
 
   return (
     <div className="py-4 pb-16">
-      {/* Top bar */}
       <div className="bg-white border border-gray-200 rounded-2xl px-5 py-3 flex items-center justify-between mb-3.5 shadow-sm flex-wrap gap-2">
         <div>
           <div className="text-[.69rem] font-bold tracking-wider uppercase text-gray-500">
-            {isPractice ? "✏️ ฝึกพร้อมเฉลยทันที" : "🏟️ จำลองสนามสอบ"}
+            {instantReveal ? "✏️ ฝึกพร้อมเฉลยทันที" : "🏟️ จำลองสนามสอบ"}
           </div>
-          <div className="font-extrabold text-gray-900 text-sm mt-0.5">{examSetName}</div>
+          <div className="font-extrabold text-gray-900 text-sm mt-0.5">{examLabel}</div>
         </div>
         <div className="flex gap-2 items-center">
           <div
@@ -178,23 +167,22 @@ export default function ExamRunner({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_220px] gap-3.5 items-start">
-        {/* Question card */}
         <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
-          {q.passage && (
-            <div className="bg-indigo-50 border-l-4 border-indigo px-4.5 py-3.5 text-sm leading-loose text-indigo-950 whitespace-pre-wrap">
-              📄 {q.passage}
+          {q.table_data && (
+            <div className="bg-indigo-50 border-l-4 border-indigo px-4.5 py-3.5 text-sm leading-loose text-indigo-950">
+              📊 <pre className="whitespace-pre-wrap font-sans inline">{JSON.stringify(q.table_data, null, 2)}</pre>
             </div>
           )}
           <div className="p-5">
             <div className="text-[.69rem] font-bold uppercase tracking-wider text-gray-400 mb-2.5">
               ข้อที่ {idx + 1} จาก {questions.length}
             </div>
-            <div className="text-[.96rem] font-bold text-gray-900 leading-relaxed mb-4.5">{q.text}</div>
+            <div className="text-[.96rem] font-bold text-gray-900 leading-relaxed mb-4.5">{q.question_text}</div>
 
             <div className="flex flex-col gap-2">
-              {q.choices.map((choice, i) => {
+              {q.options.map((choice, i) => {
                 let style = "border-gray-200 bg-gray-50 text-gray-900";
-                if (isPractice && ua.revealed) {
+                if (instantReveal && ua.revealed) {
                   if (i === ua.correctIndex) style = "border-green-500 bg-green-50 text-green-800 font-bold";
                   else if (ua.selected === i) style = "border-red-500 bg-red-50 text-red-800 font-bold";
                   else style = "border-gray-200 bg-gray-50 text-gray-400 opacity-50";
@@ -205,7 +193,7 @@ export default function ExamRunner({
                   <button
                     key={i}
                     onClick={() => selectChoice(i)}
-                    disabled={isPractice && ua.revealed}
+                    disabled={instantReveal && ua.revealed}
                     className={`flex items-center gap-3.5 text-left w-full px-4 py-3 rounded-xl border-[1.5px] text-[.91rem] leading-relaxed transition ${style}`}
                   >
                     <span className="w-6 h-6 rounded-md bg-gray-200 flex items-center justify-center text-xs font-bold shrink-0">
@@ -217,7 +205,7 @@ export default function ExamRunner({
               })}
             </div>
 
-            {isPractice && ua.revealed && (
+            {instantReveal && ua.revealed && (
               <div
                 className={`mt-4 rounded-xl p-3.5 border-[1.5px] ${
                   ua.selected === ua.correctIndex ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"
@@ -258,7 +246,7 @@ export default function ExamRunner({
                 onClick={handleNext}
                 disabled={nextDisabled || submitting}
                 className="px-6 py-2.5 rounded-lg text-white font-bold text-sm disabled:bg-gray-300"
-                style={{ background: nextDisabled ? undefined : isPractice ? "#0f766e" : "#4f46e5" }}
+                style={{ background: nextDisabled ? undefined : instantReveal ? "#0f766e" : "#4f46e5" }}
               >
                 {submitting ? "กำลังส่ง..." : nextLabel}
               </button>
@@ -266,7 +254,6 @@ export default function ExamRunner({
           </div>
         </div>
 
-        {/* Navigator */}
         <div className="bg-white border border-gray-200 rounded-2xl p-3.5 shadow-sm sticky top-16">
           <div className="text-[.69rem] font-bold uppercase tracking-wider text-gray-400 text-center mb-2.5">
             แผงข้อสอบ

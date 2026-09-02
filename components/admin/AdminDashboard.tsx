@@ -17,7 +17,7 @@ const TABS = [
   { key: "users", icon: "👥", label: "ผู้ใช้" },
   { key: "settings", icon: "⚙️", label: "การตั้งค่า" },
   { key: "blueprint", icon: "📐", label: "แผนผัง" },
-  { key: "examsets", icon: "📚", label: "ชุดข้อสอบ" },
+  { key: "examsets", icon: "📚", label: "หมวดวิชา/ปีสอบ" },
   { key: "db", icon: "🗄️", label: "DB" },
 ] as const;
 

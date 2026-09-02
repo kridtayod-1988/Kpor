@@ -18,15 +18,20 @@ export default function SettingsTab() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase.rpc("get_ai_settings").then(({ data }) => {
-      const row = Array.isArray(data) ? data[0] : data;
-      if (row) {
-        setProvider(row.ai_provider);
-        setHasGemini(row.has_gemini_key);
-        setHasClaude(row.has_claude_key);
-      }
-      setLoading(false);
-    });
+    // RLS: system_config_select อนุญาต admin อ่านแถว key='secrets' ได้โดยตรง (ไม่ต้องใช้ RPC)
+    supabase
+      .from("system_config")
+      .select("ai_provider, claude_api_key, gemini_api_key")
+      .eq("key", "secrets")
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          setProvider((data.ai_provider as "auto" | "gemini" | "claude") ?? "auto");
+          setHasGemini(!!data.gemini_api_key);
+          setHasClaude(!!data.claude_api_key);
+        }
+        setLoading(false);
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -34,14 +39,14 @@ export default function SettingsTab() {
     setSavingAi(true);
     setError(null);
     setMsg(null);
-    const { error: rpcError } = await supabase.rpc("update_ai_settings", {
-      p_provider: provider,
-      p_gemini_key: geminiKey || null,
-      p_claude_key: claudeKey || null,
-    });
+    const updatePayload: Record<string, string> = { ai_provider: provider };
+    if (geminiKey) updatePayload.gemini_api_key = geminiKey;
+    if (claudeKey) updatePayload.claude_api_key = claudeKey;
+
+    const { error: updateError } = await supabase.from("system_config").update(updatePayload).eq("key", "secrets");
     setSavingAi(false);
-    if (rpcError) {
-      setError(rpcError.message);
+    if (updateError) {
+      setError(updateError.message);
       return;
     }
     setMsg("✅ บันทึกการตั้งค่า AI เรียบร้อย");

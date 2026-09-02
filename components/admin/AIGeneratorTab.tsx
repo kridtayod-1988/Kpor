@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-type Subcategory = { id: string; name: string; group_id: string };
-type GeneratedQuestion = { text: string; choices: string[]; correct_index: number; explanation: string };
+type Category = { id: string; name: string };
+type GeneratedQuestion = { question_text: string; options: string[]; correct_answer_index: number; explanation: string };
 
 const SOURCE_MODES = [
   { key: "article", label: "📄 บทความ" },
@@ -14,8 +14,8 @@ const SOURCE_MODES = [
 
 export default function AIGeneratorTab() {
   const supabase = createClient();
-  const [subcats, setSubcats] = useState<Subcategory[]>([]);
-  const [subcategoryId, setSubcategoryId] = useState("");
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryId, setCategoryId] = useState("");
   const [sourceMode, setSourceMode] = useState("topic");
   const [sourceInput, setSourceInput] = useState("");
   const [provider, setProvider] = useState<"auto" | "gemini" | "claude">("auto");
@@ -27,11 +27,7 @@ export default function AIGeneratorTab() {
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase
-      .from("subcategories")
-      .select("id, name, group_id")
-      .order("sort_order")
-      .then(({ data }) => setSubcats((data as Subcategory[]) ?? []));
+    supabase.from("categories").select("id, name").eq("is_active", true).order("sort_order").then(({ data }) => setCategories((data as Category[]) ?? []));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -39,17 +35,17 @@ export default function AIGeneratorTab() {
     setError(null);
     setSavedMsg(null);
     setPreview(null);
-    if (!subcategoryId || !sourceInput.trim()) {
+    if (!categoryId || !sourceInput.trim()) {
       setError("กรุณาเลือกหมวดวิชาและกรอกเนื้อหา/หัวข้อ");
       return;
     }
     setLoading(true);
-    const subcategoryName = subcats.find((s) => s.id === subcategoryId)?.name ?? subcategoryId;
+    const categoryName = categories.find((c) => c.id === categoryId)?.name ?? categoryId;
     try {
       const res = await fetch("/api/admin/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subcategoryId, subcategoryName, sourceMode, sourceInput, provider }),
+        body: JSON.stringify({ categoryId, categoryName, sourceMode, sourceInput, provider }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "เกิดข้อผิดพลาด");
@@ -66,13 +62,14 @@ export default function AIGeneratorTab() {
     if (!preview || !logId) return;
     setSaving(true);
     const rows = preview.map((q) => ({
-      subcategory_id: subcategoryId,
-      text: q.text,
-      choices: q.choices,
-      correct_index: q.correct_index,
+      category_id: categoryId,
+      question_text: q.question_text,
+      options: q.options,
+      correct_answer_index: q.correct_answer_index,
       explanation: q.explanation,
-      source_round: "ai_generated" as const,
+      source: "ai_generated" as const,
       ai_generation_log_id: logId,
+      is_active: true,
     }));
     const { error: insertError } = await supabase.from("questions").insert(rows);
     if (insertError) {
@@ -80,10 +77,7 @@ export default function AIGeneratorTab() {
       setSaving(false);
       return;
     }
-    await supabase
-      .from("ai_generation_logs")
-      .update({ status: "saved", reviewed_at: new Date().toISOString() })
-      .eq("id", logId);
+    await supabase.from("ai_generation_logs").update({ status: "saved", reviewed_at: new Date().toISOString() }).eq("id", logId);
     setSaving(false);
     setSavedMsg(`✅ บันทึกข้อสอบ ${rows.length} ข้อลงคลังเรียบร้อย`);
     setPreview(null);
@@ -91,10 +85,7 @@ export default function AIGeneratorTab() {
 
   const handleDiscard = async () => {
     if (logId) {
-      await supabase
-        .from("ai_generation_logs")
-        .update({ status: "discarded", reviewed_at: new Date().toISOString() })
-        .eq("id", logId);
+      await supabase.from("ai_generation_logs").update({ status: "discarded", reviewed_at: new Date().toISOString() }).eq("id", logId);
     }
     setPreview(null);
     setLogId(null);
@@ -105,14 +96,10 @@ export default function AIGeneratorTab() {
       <div className="bg-white border border-gray-200 rounded-2xl p-5 flex flex-col gap-3.5">
         <div>
           <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">เลือกหมวดวิชา ก.พ.</div>
-          <select
-            value={subcategoryId}
-            onChange={(e) => setSubcategoryId(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
-          >
+          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm">
             <option value="">— เลือกหมวดวิชา —</option>
-            {subcats.map((s) => (
-              <option key={s.id} value={s.id}>{s.name}</option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
         </div>
@@ -125,10 +112,7 @@ export default function AIGeneratorTab() {
                 key={m.key}
                 onClick={() => setSourceMode(m.key)}
                 className="px-3.5 py-1.5 rounded-full text-sm font-semibold"
-                style={{
-                  background: sourceMode === m.key ? "#4f46e5" : "#f3f4f6",
-                  color: sourceMode === m.key ? "#fff" : "#6b7280",
-                }}
+                style={{ background: sourceMode === m.key ? "#4f46e5" : "#f3f4f6", color: sourceMode === m.key ? "#fff" : "#6b7280" }}
               >
                 {m.label}
               </button>
@@ -163,10 +147,7 @@ export default function AIGeneratorTab() {
                 key={p}
                 onClick={() => setProvider(p)}
                 className="px-3.5 py-1.5 rounded-full text-sm font-semibold"
-                style={{
-                  background: provider === p ? "#6d28d9" : "#f3f4f6",
-                  color: provider === p ? "#fff" : "#6b7280",
-                }}
+                style={{ background: provider === p ? "#6d28d9" : "#f3f4f6", color: provider === p ? "#fff" : "#6b7280" }}
               >
                 {p === "auto" ? "🔀 Auto" : p === "gemini" ? "✨ Gemini" : "🧠 Claude"}
               </button>
@@ -194,18 +175,16 @@ export default function AIGeneratorTab() {
           <div className="flex flex-col gap-3 mb-4">
             {preview.map((q, i) => (
               <div key={i} className="border border-gray-200 rounded-xl p-3.5">
-                <div className="text-sm font-semibold text-gray-900 mb-2">
-                  {i + 1}. {q.text}
-                </div>
+                <div className="text-sm font-semibold text-gray-900 mb-2">{i + 1}. {q.question_text}</div>
                 <div className="flex flex-col gap-1">
-                  {q.choices.map((c, ci) => (
+                  {q.options.map((c, ci) => (
                     <div
                       key={ci}
                       className={`text-xs px-2.5 py-1.5 rounded-lg ${
-                        ci === q.correct_index ? "bg-green-50 text-green-800 font-bold" : "bg-gray-50 text-gray-600"
+                        ci === q.correct_answer_index ? "bg-green-50 text-green-800 font-bold" : "bg-gray-50 text-gray-600"
                       }`}
                     >
-                      {["ก", "ข", "ค", "ง"][ci]}. {c} {ci === q.correct_index && "✓ เฉลย"}
+                      {["ก", "ข", "ค", "ง"][ci]}. {c} {ci === q.correct_answer_index && "✓ เฉลย"}
                     </div>
                   ))}
                 </div>
@@ -214,17 +193,10 @@ export default function AIGeneratorTab() {
             ))}
           </div>
           <div className="flex gap-2.5">
-            <button
-              onClick={handleDiscard}
-              className="px-4 py-2 bg-gray-100 rounded-lg text-gray-600 text-sm font-semibold"
-            >
+            <button onClick={handleDiscard} className="px-4 py-2 bg-gray-100 rounded-lg text-gray-600 text-sm font-semibold">
               🧹 ล้างรีวิว
             </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="px-4 py-2 bg-green-600 rounded-lg text-white text-sm font-bold disabled:opacity-60"
-            >
+            <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-green-600 rounded-lg text-white text-sm font-bold disabled:opacity-60">
               {saving ? "กำลังบันทึก..." : "💾 บันทึกลงคลัง"}
             </button>
           </div>
