@@ -96,13 +96,17 @@ export default function ExamRunner({
   const selectChoice = (choiceIdx: number) => {
     if (ua.revealed) return;
     setAnswers((prev) => ({ ...prev, [q.id]: { ...prev[q.id], selected: choiceIdx } }));
-    saveAnswerAction(attemptId, q.id, choiceIdx, ua.flagged);
+    void saveAnswerAction(attemptId, q.id, choiceIdx, ua.flagged).then((res) => {
+      if (res?.error) setError(res.error);
+    });
   };
 
   const toggleFlag = () => {
     const next = !ua.flagged;
     setAnswers((prev) => ({ ...prev, [q.id]: { ...prev[q.id], flagged: next } }));
-    saveAnswerAction(attemptId, q.id, ua.selected, next);
+    void saveAnswerAction(attemptId, q.id, ua.selected, next).then((res) => {
+      if (res?.error) setError(res.error);
+    });
   };
 
   const goTo = (i: number) => setIdx(Math.max(0, Math.min(questions.length - 1, i)));
@@ -204,7 +208,9 @@ export default function ExamRunner({
                 return (
                   <button
                     key={i}
+                    type="button"
                     onClick={() => selectChoice(i)}
+                    aria-pressed={ua.selected === i}
                     disabled={isPractice && ua.revealed}
                     className={`flex items-center gap-3.5 text-left w-full px-4 py-3 rounded-xl border-[1.5px] text-[.91rem] leading-relaxed transition ${style}`}
                   >
@@ -267,7 +273,7 @@ export default function ExamRunner({
         </div>
 
         {/* Navigator */}
-        <div className="bg-white border border-gray-200 rounded-2xl p-3.5 shadow-sm sticky top-16">
+        <div className="bg-white border border-gray-200 rounded-2xl p-3.5 shadow-sm lg:sticky lg:top-16">
           <div className="text-[.69rem] font-bold uppercase tracking-wider text-gray-400 text-center mb-2.5">
             แผงข้อสอบ
           </div>
