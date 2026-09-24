@@ -67,13 +67,12 @@ export default async function ExamPage({ params }: { params: { attemptId: string
   return (
     <ExamRunner
       attemptId={attempt.id}
-      instantReveal={attempt.instant_reveal}
+      mode={attempt.mode}
       startedAt={attempt.started_at}
       timeLimitMinutes={timeLimitMinutes}
-      examLabel={categoryOrYearLabel || MODE_LABEL[attempt.mode] || "ทำข้อสอบ"}
+      examSetName={categoryOrYearLabel || MODE_LABEL[attempt.mode] || "ทำข้อสอบ"}
       questions={questions}
       initialAnswers={attempt.user_answers}
-      initialFlags={attempt.flagged_question_ids}
     />
   );
 }
