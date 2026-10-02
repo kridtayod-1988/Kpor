@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build || node scripts/ensure-next-client-manifests.mjs",
+    "build": "next build && node scripts/ensure-next-client-manifests.mjs",
     "start": "next start",
     "lint": "eslint ."
   },
