@@ -21,7 +21,7 @@ export default function ModeCard({
       </div>
       <div className="px-5 py-3.5 flex items-center justify-between">
         <span className="text-sm font-bold" style={{ color: mode.accent }}>
-          ตั้งค่าและเริ่มทำข้อสอบ →
+          ดูรายชื่อชุดข้อสอบ (หน้าที่ 2)
         </span>
         <span
           className="transition-transform group-hover:translate-x-1"

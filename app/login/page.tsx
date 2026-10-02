@@ -1,68 +1,115 @@
 "use client";
 
-import { useState } from "react";
+import { FormEvent, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
+const getRedirectUrl = () =>
+  `${process.env.NEXT_PUBLIC_SITE_URL || window.location.origin}/auth/callback`;
+
 export default function LoginPage() {
+  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const signInWithGoogle = async () => {
+  const clearFeedback = () => {
     setError(null);
+    setMessage(null);
+  };
+
+  const signInWithGoogle = async () => {
+    clearFeedback();
     setLoading(true);
-    const supabase = createClient();
-    const { error: signInError } = await supabase.auth.signInWithOAuth({
+    const { error: signInError } = await createClient().auth.signInWithOAuth({
       provider: "google",
-      options: {
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`,
-      },
+      options: { redirectTo: getRedirectUrl() },
     });
     if (signInError) {
-      setError("เข้าสู่ระบบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+      setError("เข้าสู่ระบบด้วย Google ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
       setLoading(false);
     }
   };
 
+  const handleEmailAuth = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    clearFeedback();
+    setLoading(true);
+    const supabase = createClient();
+    const result = mode === "login"
+      ? await supabase.auth.signInWithPassword({ email, password })
+      : await supabase.auth.signUp({ email, password, options: { emailRedirectTo: getRedirectUrl() } });
+
+    if (result.error) {
+      setError(mode === "login" ? "อีเมลหรือรหัสผ่านไม่ถูกต้อง" : "สมัครสมาชิกไม่สำเร็จ กรุณาตรวจสอบข้อมูลแล้วลองใหม่");
+      setLoading(false);
+      return;
+    }
+
+    if (mode === "signup" && !result.data.session) {
+      setMessage("สมัครสมาชิกแล้ว กรุณาตรวจสอบอีเมลเพื่อยืนยันบัญชี");
+      setLoading(false);
+      return;
+    }
+
+    window.location.assign("/");
+  };
+
+  const requestPasswordReset = async () => {
+    clearFeedback();
+    if (!email.trim()) {
+      setError("กรุณากรอกอีเมลก่อนขอเปลี่ยนรหัสผ่าน");
+      return;
+    }
+    setLoading(true);
+    const { error: resetError } = await createClient().auth.resetPasswordForEmail(email, {
+      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || window.location.origin}/auth/reset-password`,
+    });
+    setLoading(false);
+    setMessage(resetError ? "ส่งลิงก์ไม่สำเร็จ กรุณาตรวจสอบอีเมลอีกครั้ง" : "ส่งลิงก์เปลี่ยนรหัสผ่านไปที่อีเมลแล้ว");
+    if (resetError) setError("ส่งลิงก์ไม่สำเร็จ กรุณาตรวจสอบอีเมลอีกครั้ง");
+  };
+
   return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="slide-up w-full max-w-sm bg-white rounded-[22px] shadow-cardLg border border-[#e8eaf0] overflow-hidden">
-        <div
-          className="px-8 pt-10 pb-8 text-center text-white"
-          style={{ background: "linear-gradient(135deg,#4f46e5,#7c3aed 60%,#6d28d9)" }}
-        >
-          <div className="text-3xl mb-2">🎓</div>
-          <div className="font-extrabold text-lg">คลังข้อสอบจริง ก.พ.</div>
-          <div className="text-sm opacity-75 mt-1">E-EXAM 2569</div>
+    <main className="min-h-screen flex items-center justify-center px-4 py-8">
+      <section className="slide-up w-full max-w-md bg-white rounded-[22px] shadow-cardLg border border-[#e8eaf0] overflow-hidden" aria-labelledby="login-title">
+        <div className="px-8 pt-10 pb-8 text-center text-white" style={{ background: "linear-gradient(135deg,#4f46e5,#7c3aed 60%,#6d28d9)" }}>
+          <div className="text-3xl mb-2" aria-hidden="true">คลังข้อสอบ</div>
+          <h1 id="login-title" className="font-extrabold text-lg">คลังข้อสอบจริง ก.พ.</h1>
+          <p className="text-sm opacity-75 mt-1">E-EXAM 2569</p>
         </div>
 
         <div className="p-8 flex flex-col gap-5">
-          <p className="text-sm text-gray-500 text-center leading-relaxed">
-            เข้าสู่ระบบเพื่อฝึกทำข้อสอบจริง ก.พ. พร้อมเฉลยละเอียดแบบ step-by-step
-            และติดตามความก้าวหน้าของคุณ
-          </p>
+          <p className="text-sm text-gray-500 text-center leading-relaxed">ฝึกทำข้อสอบจริง ก.พ. พร้อมเฉลยละเอียด และติดตามความก้าวหน้าของคุณ</p>
 
-          <button
-            onClick={signInWithGoogle}
-            disabled={loading}
-            className="flex items-center justify-center gap-3 w-full py-3 rounded-xl border border-gray-300 bg-white font-semibold text-sm text-gray-700 hover:bg-gray-50 transition disabled:opacity-60"
-          >
-            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-              <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84c-.21 1.13-.85 2.09-1.8 2.73v2.27h2.92c1.7-1.57 2.68-3.88 2.68-6.64z" />
-              <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.27c-.81.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33C2.44 15.98 5.48 18 9 18z" />
-              <path fill="#FBBC05" d="M3.97 10.71a5.4 5.4 0 010-3.42V4.96H.96a9 9 0 000 8.08l3.01-2.33z" />
-              <path fill="#EA4335" d="M9 3.58c1.32 0 2.51.46 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0 5.48 0 2.44 2.02.96 4.96l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z" />
-            </svg>
-            {loading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบด้วย Google"}
+          <button type="button" onClick={signInWithGoogle} disabled={loading} className="flex items-center justify-center gap-3 w-full py-3 rounded-xl border border-gray-300 bg-white font-semibold text-sm text-gray-700 hover:bg-gray-50 transition disabled:opacity-60">
+            <span className="font-bold text-base" aria-hidden="true">G</span>
+            {loading ? "กำลังดำเนินการ..." : "ดำเนินการต่อด้วย Google"}
           </button>
 
-          {error && <p className="text-xs text-red-600 text-center">{error}</p>}
+          <div className="flex items-center gap-3 text-xs text-gray-400"><span className="h-px flex-1 bg-gray-200" /><span>หรือใช้อีเมล</span><span className="h-px flex-1 bg-gray-200" /></div>
 
-          <p className="text-[11px] text-gray-400 text-center leading-relaxed">
-            การเข้าสู่ระบบถือว่าคุณยอมรับข้อกำหนดและเงื่อนไขการใช้งาน
-            ซึ่งจะแสดงให้ยืนยันอีกครั้งก่อนใช้งานครั้งแรก
-          </p>
+          <div className="grid grid-cols-2 gap-2 rounded-xl bg-gray-100 p-1" role="tablist" aria-label="ประเภทการใช้งาน">
+            <button type="button" role="tab" aria-selected={mode === "login"} onClick={() => { setMode("login"); clearFeedback(); }} className={`rounded-lg py-2 text-sm font-semibold transition ${mode === "login" ? "bg-white text-indigo-700 shadow-sm" : "text-gray-500"}`}>เข้าสู่ระบบ</button>
+            <button type="button" role="tab" aria-selected={mode === "signup"} onClick={() => { setMode("signup"); clearFeedback(); }} className={`rounded-lg py-2 text-sm font-semibold transition ${mode === "signup" ? "bg-white text-indigo-700 shadow-sm" : "text-gray-500"}`}>สมัครสมาชิก</button>
+          </div>
+
+          <form onSubmit={handleEmailAuth} className="flex flex-col gap-3">
+            <label className="text-sm font-semibold text-gray-700" htmlFor="email">อีเมล</label>
+            <input id="email" type="email" required autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none focus:border-indigo-500" />
+            <label className="text-sm font-semibold text-gray-700" htmlFor="password">รหัสผ่าน</label>
+            <input id="password" type="password" required minLength={6} autoComplete={mode === "login" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="อย่างน้อย 6 ตัวอักษร" className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none focus:border-indigo-500" />
+            <button type="submit" disabled={loading} className="w-full rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white hover:bg-indigo-700 transition disabled:opacity-60">{mode === "login" ? "เข้าสู่ระบบ" : "สร้างบัญชี"}</button>
+          </form>
+
+          {mode === "login" && <button type="button" onClick={requestPasswordReset} disabled={loading} className="text-sm font-semibold text-indigo-600 hover:underline disabled:opacity-60">ลืมรหัสผ่าน?</button>}
+          {error && <p role="alert" className="text-xs text-red-600 text-center">{error}</p>}
+          {message && <p role="status" className="text-xs text-emerald-600 text-center">{message}</p>}
+          <p className="text-[11px] text-gray-400 text-center leading-relaxed">การใช้งานถือว่าคุณยอมรับข้อกำหนดและเงื่อนไขการใช้งาน</p>
         </div>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }
+
