@@ -12,21 +12,19 @@ export default async function HomePage() {
   let attemptCount = 0;
 
   if (user) {
-    const [profileResult, attemptsResult] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("display_name")
-        .eq("id", user.id)
-        .maybeSingle(),
-      supabase
-        .from("user_attempts")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", user.id)
-        .not("finished_at", "is", null),
-    ]);
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("display_name")
+      .eq("id", user.id)
+      .single();
+    if (profile?.display_name) displayName = profile.display_name;
 
-    if (profileResult.data?.display_name) displayName = profileResult.data.display_name;
-    attemptCount = attemptsResult.count ?? 0;
+    const { count } = await supabase
+      .from("user_attempts")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .not("finished_at", "is", null);
+    attemptCount = count ?? 0;
   }
 
   return (
