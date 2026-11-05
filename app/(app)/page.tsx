@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import ModeCard from "@/components/ModeCard";
 import { MODES } from "@/lib/data/modes";
@@ -45,7 +46,7 @@ export default async function HomePage() {
       </div>
 
       {/* GPA3 hero banner */}
-      <a
+      <Link
         href="/exam-sets?mode=archive&set=GPA3001"
         className="block rounded-[18px] px-5 py-4 mb-5 border-2 hover:-translate-y-0.5 transition-transform"
         style={{
@@ -65,7 +66,7 @@ export default async function HomePage() {
             ▶ เริ่มสอบ
           </div>
         </div>
-      </a>
+      </Link>
 
       {/* 4 mode cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
