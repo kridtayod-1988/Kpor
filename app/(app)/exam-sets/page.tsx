@@ -81,9 +81,10 @@ export default function ExamSetsPage() {
       </div>
 
       {/* Quick-switch mode chips */}
-      <div className="flex flex-wrap gap-2 mb-5">
+      <nav aria-label="เลือกโหมดการฝึก" className="flex flex-wrap gap-2 mb-5">
         {MODES.map((m) => (
           <button
+            type="button"
             key={m.key}
             onClick={() => switchMode(m.key)}
             className="px-3.5 py-1.5 rounded-full text-sm font-semibold transition"
@@ -96,11 +97,16 @@ export default function ExamSetsPage() {
             {m.icon} {m.title}
           </button>
         ))}
-      </div>
+      </nav>
 
       {/* Search box */}
       <div className="relative mb-5">
+        <label htmlFor="exam-set-search" className="sr-only">
+          ค้นหาชื่อชุดข้อสอบ
+        </label>
         <input
+          id="exam-set-search"
+          type="search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="ค้นหาชื่อชุดข้อสอบ..."
@@ -137,6 +143,7 @@ export default function ExamSetsPage() {
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setSelectedSet(set)}
                 className="shrink-0 px-5 py-2.5 rounded-xl text-white font-bold text-sm"
                 style={{ background: mode.accent }}

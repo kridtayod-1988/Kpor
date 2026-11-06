@@ -5,9 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const requestedNext = searchParams.get("next") ?? "/";
-  // Allow only same-site paths so OAuth cannot redirect users to an external URL.
-  const next = requestedNext.startsWith("/") && !requestedNext.startsWith("//") ? requestedNext : "/";
+  const next = searchParams.get("next") ?? "/";
 
   if (code) {
     const supabase = createClient();
