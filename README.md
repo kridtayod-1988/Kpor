@@ -77,7 +77,8 @@ https://<your-domain>/auth/callback
 - จำกัดการเปิดเฉลยให้เป็นข้อที่อยู่ในชุดสอบของ Attempt เจ้าของเท่านั้น
 - Admin Question CRUD รองรับเพิ่ม/แก้ไข/ลบ และป้องกันการแก้โจทย์ที่ถูกใช้ใน Attempt แล้วเพื่อคงความถูกต้องของประวัติ
 - เพิ่ม Exam Set Builder: ค้นหา/กรองคำถาม เพิ่ม-นำออก จัดลำดับ และกำหนดคะแนนรายข้อ; ชุดใหม่เป็นฉบับร่างและตรวจจำนวนข้อ/คะแนนก่อนเผยแพร่
-- ล็อกการเปลี่ยนคำถาม ลำดับ คะแนน และการลบชุดข้อสอบเมื่อมี Attempt แล้ว ทั้งในหน้า Admin และ Database Trigger
+- ล็อกการเปลี่ยนคำถาม ลำดับ คะแนน เกณฑ์แยกหมวด metadata และการลบชุดข้อสอบเมื่อมี Attempt แล้ว ทั้งในหน้า Admin และ Database Trigger
+- ตัวจัดชุดข้อสอบปิดการแก้ไขทันทีเมื่อยังตรวจประวัติ/Mapping ไม่สำเร็จ และใช้ request token กันคำตอบจากการโหลดเก่าทับชุดที่เปิดใหม่
 - `start_attempt` ตรวจจำนวนคำถามที่ใช้งานได้และคะแนนรวมก่อนสร้าง Attempt พร้อมล็อกแถวชุดข้อสอบเพื่อป้องกันการแก้ชุดพร้อมกับเริ่มสอบ
 - จำกัด RPC เฉพาะผู้ใช้ที่เข้าสู่ระบบตามลักษณะการใช้งาน และเอาสิทธิ์ PUBLIC/anon ออกจากฟังก์ชัน Admin ที่ไม่ควรเปิดให้บุคคลทั่วไป
 - เพิ่มการตรวจ role ฝั่ง Server และตรวจ schema ของ JSON ที่ AI สร้างก่อนส่งกลับให้ Preview
@@ -86,7 +87,7 @@ https://<your-domain>/auth/callback
 ## งานที่ยังต้องทำต่อ
 
 - เชื่อม Vercel เพื่อตรวจว่า Deployment จริงใช้ Supabase Project ใด
-- เพิ่ม CI ตรวจ TypeScript และ production build; ESLint ยังต้องตั้งค่า dependency/config ให้ครบก่อน
+- CI ตรวจ TypeScript และ production build แล้ว; ESLint ยังต้องเพิ่ม dependency/config ก่อนเปิดเป็น check
 - ทำ Google Sheets ingestion ด้วย OAuth/การอนุญาตที่เหมาะสม
 - ทำ Backup/Restore ให้ครอบคลุมทุกตาราง พร้อม validation และ rollback
 - เพิ่ม UX สำหรับสร้างสำเนาข้อสอบใหม่แทนการแก้ข้อสอบที่มีประวัติการสอบ และตรวจสอบ Auth redirect, rate limiting และ audit logging
