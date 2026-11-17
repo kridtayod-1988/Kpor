@@ -8,7 +8,7 @@ type ActionResult<T = Record<never, never>> =
   | { success?: false; error: string };
 
 export async function acceptTermsAction(termsVersionId: string): Promise<ActionResult> {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -37,7 +37,7 @@ export async function acceptTermsAction(termsVersionId: string): Promise<ActionR
 export async function startAttemptAction(
   examSetId: string
 ): Promise<ActionResult<{ attemptId: string }>> {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -63,7 +63,7 @@ export async function saveAnswerAction(
   selectedIndex: number | null,
   isFlagged: boolean
 ): Promise<ActionResult> {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { error } = await supabase.rpc("upsert_answer", {
     p_attempt_id: attemptId,
     p_question_id: questionId,
@@ -77,7 +77,7 @@ export async function saveAnswerAction(
 export async function submitAttemptAction(
   attemptId: string
 ): Promise<ActionResult<{ result: unknown }>> {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data, error } = await supabase.rpc("submit_attempt", {
     p_attempt_id: attemptId,
   });
@@ -91,7 +91,7 @@ export async function revealAnswerAction(
   questionId: string,
   attemptId: string
 ): Promise<ActionResult<{ correctIndex: number; explanation: string }>> {
-  const supabase = createClient();
+  const supabase = await createClient();
   const { data, error } = await supabase.rpc("reveal_question_answer", {
     p_question_id: questionId,
     p_attempt_id: attemptId,
