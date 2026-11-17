@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 type ExamSetRow = {
@@ -81,6 +81,8 @@ export default function ExamSetsTab() {
   const [builderMessage, setBuilderMessage] = useState<string | null>(null);
   const [builderError, setBuilderError] = useState<string | null>(null);
   const [busyQuestionId, setBusyQuestionId] = useState<string | null>(null);
+  const assignmentsRequestId = useRef(0);
+  const questionListRequestId = useRef(0);
 
   const selectedSet = sets.find((set) => set.id === selectedSetId) ?? null;
   const assignedIds = new Set(assigned.map((row) => row.id));
@@ -118,6 +120,7 @@ export default function ExamSetsTab() {
   };
 
   const loadAssignments = async (examSetId: string) => {
+    const requestId = ++assignmentsRequestId.current;
     setAssignmentsLoading(true);
     setBuilderLoadFailed(true);
     setBuilderError(null);
@@ -135,6 +138,8 @@ export default function ExamSetsTab() {
           .eq("exam_set_id", examSetId)
           .limit(1),
       ]);
+
+    if (requestId !== assignmentsRequestId.current) return;
 
     if (mappingError || attemptError) {
       setBuilderError(mappingError?.message ?? attemptError?.message ?? "โหลดชุดข้อสอบไม่สำเร็จ");
@@ -157,6 +162,8 @@ export default function ExamSetsTab() {
       .from("questions")
       .select(QUESTION_SELECT)
       .in("id", questionIds);
+
+    if (requestId !== assignmentsRequestId.current) return;
 
     if (questionError) {
       setBuilderError(questionError.message);
@@ -196,6 +203,7 @@ export default function ExamSetsTab() {
 
   const loadAvailableQuestions = async () => {
     if (!selectedSetId) return;
+    const requestId = ++questionListRequestId.current;
     setQuestionsLoading(true);
     setBuilderError(null);
 
@@ -210,6 +218,7 @@ export default function ExamSetsTab() {
     if (questionSearch.trim()) query = query.ilike("text", `%${questionSearch.trim()}%`);
 
     const { data, error: queryError } = await query;
+    if (requestId !== questionListRequestId.current) return;
     if (queryError) {
       setBuilderError(queryError.message);
       setAvailableQuestions([]);
@@ -248,6 +257,8 @@ export default function ExamSetsTab() {
   }, [questionSearch]);
 
   const openBuilder = (examSetId: string) => {
+    assignmentsRequestId.current += 1;
+    questionListRequestId.current += 1;
     setSelectedQuestionIds([]);
     setQuestionSearch("");
     setQuestionFilter("ALL");
@@ -256,6 +267,12 @@ export default function ExamSetsTab() {
     // Lock controls immediately while history and mappings are being verified.
     setBuilderLoadFailed(true);
     setSelectedSetId(examSetId);
+  };
+
+  const closeBuilder = () => {
+    assignmentsRequestId.current += 1;
+    questionListRequestId.current += 1;
+    setSelectedSetId(null);
   };
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
@@ -475,7 +492,22 @@ export default function ExamSetsTab() {
     setBusyQuestionId(null);
 
     if (third.error) {
-      setBuilderError(third.error.message);
+      const [restoreTarget, restoreCurrent] = await Promise.all([
+        supabase
+          .from("exam_set_questions")
+          .update({ position: target.position })
+          .eq("id", target.mappingId),
+        supabase
+          .from("exam_set_questions")
+          .update({ position: current.position })
+          .eq("id", current.mappingId),
+      ]);
+      const rollbackError = restoreTarget.error ?? restoreCurrent.error;
+      setBuilderError(
+        rollbackError
+          ? `การเรียงลำดับล้มเหลว และกู้คืนตำแหน่งเดิมไม่ครบ: ${rollbackError.message}`
+          : third.error.message
+      );
       await loadAssignments(selectedSet.id);
       return;
     }
@@ -655,7 +687,7 @@ export default function ExamSetsTab() {
         <>
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div>
-              <button type="button" onClick={() => setSelectedSetId(null)} className="text-xs text-indigo-700 font-semibold mb-2">
+              <button type="button" onClick={closeBuilder} className="text-xs text-indigo-700 font-semibold mb-2">
                 ← กลับไปยังชุดข้อสอบ
               </button>
               <h3 className="font-extrabold text-gray-900">{selectedSet.name}</h3>
