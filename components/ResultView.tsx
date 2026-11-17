@@ -16,6 +16,7 @@ type ReviewRow = {
   selected_index: number | null;
   is_flagged: boolean;
   is_correct: boolean | null;
+  points: number;
 };
 
 type Section = {
@@ -77,7 +78,7 @@ export default function ResultView({
   const sectionResults = isGpa3
     ? sections.map((sec) => {
         const rows = review.filter((r) => sec.subcategory_ids.includes(r.subcategory_id));
-        const score = rows.filter((r) => r.is_correct).length * 2; // สมมติ 2 คะแนน/ข้อ ตาม default points
+        const score = rows.reduce((total, row) => total + (row.is_correct ? row.points : 0), 0);
         const sectionPct = sec.max_score > 0 ? Math.round((score / sec.max_score) * 100) : 0;
         const pass = passedSections?.[sec.id] ?? score >= sec.pass_score;
         return { ...sec, score, pct: sectionPct, pass };
