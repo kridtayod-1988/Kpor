@@ -10,34 +10,45 @@ export async function acceptTermsAction(termsVersionId: string) {
   } = await supabase.auth.getUser();
 
   if (!user) return { error: "ไม่พบผู้ใช้ที่เข้าสู่ระบบ" };
+  if (!termsVersionId) return { error: "ไม่พบข้อกำหนดที่ต้องการยอมรับ" };
 
   const { error } = await supabase
     .from("terms_acceptance")
     .insert({ user_id: user.id, terms_version_id: termsVersionId });
 
-  if (error) return { error: error.message };
+  // ยอมรับข้อกำหนดเดิมซ้ำได้โดยไม่ทำให้หน้าใช้งานล้มเหลว
+  if (error && error.code !== "23505") return { error: error.message };
 
   revalidatePath("/", "layout");
   return { success: true };
 }
 
-export async function startAttemptAction(examSetId: string, mode: string) {
+/**
+ * Create an attempt through the database function.
+ *
+ * start_attempt validates that the set is published, enforces verification
+ * requirements, and creates the attempt atomically. Do not insert directly
+ * into user_attempts from the browser/server action.
+ */
+export async function startAttemptAction(examSetId: string) {
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) return { error: "กรุณาเข้าสู่ระบบก่อนเริ่มทำข้อสอบ" };
+  if (!examSetId) return { error: "ไม่พบชุดข้อสอบที่ต้องการเริ่ม" };
 
-  const { data, error } = await supabase
-    .from("user_attempts")
-    .insert({ user_id: user.id, exam_set_id: examSetId, mode })
-    .select("id")
-    .single();
+  const { data: attemptId, error } = await supabase.rpc("start_attempt", {
+    p_exam_set_id: examSetId,
+  });
 
   if (error) return { error: error.message };
+  if (typeof attemptId !== "string" || !attemptId) {
+    return { error: "ระบบไม่สามารถสร้างรหัสการสอบได้ กรุณาลองใหม่" };
+  }
 
-  return { success: true, attemptId: data.id };
+  return { success: true, attemptId };
 }
 
 export async function saveAnswerAction(
@@ -63,7 +74,7 @@ export async function submitAttemptAction(attemptId: string) {
     p_attempt_id: attemptId,
   });
   if (error) return { error: error.message };
-  // supabase-js คืนค่า RPC ที่เป็น `returns table` เป็น array ของแถวเดียว
+  // supabase-js returns a single-row RETURNS TABLE result as an array.
   const result = Array.isArray(data) ? data[0] : data;
   return { success: true, result };
 }
@@ -76,5 +87,10 @@ export async function revealAnswerAction(questionId: string, attemptId: string) 
   });
   if (error) return { error: error.message };
   const row = Array.isArray(data) ? data[0] : data;
-  return { success: true, correctIndex: row?.correct_index as number, explanation: row?.explanation as string };
+  if (!row) return { error: "ไม่พบเฉลยของข้อนี้" };
+  return {
+    success: true,
+    correctIndex: row.correct_index as number,
+    explanation: row.explanation as string,
+  };
 }
