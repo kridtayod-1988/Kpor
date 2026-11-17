@@ -68,6 +68,42 @@ export default function ExamRunner({
     deadline ? Math.max(0, Math.floor((deadline - Date.now()) / 1000)) : null
   );
   const autoSubmitted = useRef(false);
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const pendingSavesRef = useRef(new Map<string, { selected: number | null; flagged: boolean }>());
+
+  const enqueueAnswerSave = (
+    questionId: string,
+    selected: number | null,
+    flagged: boolean
+  ) => {
+    pendingSavesRef.current.set(questionId, { selected, flagged });
+    saveQueueRef.current = saveQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        const pending = pendingSavesRef.current.get(questionId);
+        if (!pending) return;
+
+        const result = await saveAnswerAction(attemptId, questionId, pending.selected, pending.flagged);
+        if (!result.success) throw new Error(result.error);
+
+        if (pendingSavesRef.current.get(questionId) === pending) {
+          pendingSavesRef.current.delete(questionId);
+        }
+      })
+      .catch((saveError: unknown) => {
+        setError(saveError instanceof Error ? saveError.message : "บันทึกคำตอบไม่สำเร็จ");
+      });
+    return saveQueueRef.current;
+  };
+
+  const flushAnswerSaves = async () => {
+    await saveQueueRef.current;
+    for (const [questionId, pending] of pendingSavesRef.current.entries()) {
+      const result = await saveAnswerAction(attemptId, questionId, pending.selected, pending.flagged);
+      if (!result.success) throw new Error(result.error);
+      pendingSavesRef.current.delete(questionId);
+    }
+  };
 
   useEffect(() => {
     if (!deadline) return;
@@ -94,23 +130,30 @@ export default function ExamRunner({
   };
 
   const selectChoice = (choiceIdx: number) => {
-    if (ua.revealed) return;
+    if (ua.revealed || submitting) return;
     setAnswers((prev) => ({ ...prev, [q.id]: { ...prev[q.id], selected: choiceIdx } }));
-    saveAnswerAction(attemptId, q.id, choiceIdx, ua.flagged);
+    void enqueueAnswerSave(q.id, choiceIdx, ua.flagged);
   };
 
   const toggleFlag = () => {
+    if (submitting) return;
     const next = !ua.flagged;
     setAnswers((prev) => ({ ...prev, [q.id]: { ...prev[q.id], flagged: next } }));
-    saveAnswerAction(attemptId, q.id, ua.selected, next);
+    void enqueueAnswerSave(q.id, ua.selected, next);
   };
 
   const goTo = (i: number) => setIdx(Math.max(0, Math.min(questions.length - 1, i)));
 
   const handleNext = async () => {
     if (isPractice && ua.selected !== null && !ua.revealed) {
+      try {
+        await flushAnswerSaves();
+      } catch (saveError) {
+        setError(saveError instanceof Error ? saveError.message : "บันทึกคำตอบไม่สำเร็จ");
+        return;
+      }
       const res = await revealAnswerAction(q.id, attemptId);
-      if (res?.error) {
+      if (!res.success) {
         setError(res.error);
         return;
       }
@@ -131,8 +174,16 @@ export default function ExamRunner({
     }
     setSubmitting(true);
     setError(null);
+    try {
+      await flushAnswerSaves();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "บันทึกคำตอบไม่สำเร็จ");
+      setSubmitting(false);
+      return;
+    }
+
     const res = await submitAttemptAction(attemptId);
-    if (res?.error) {
+    if (!res.success) {
       setError(res.error);
       setSubmitting(false);
       return;
@@ -205,7 +256,7 @@ export default function ExamRunner({
                   <button
                     key={i}
                     onClick={() => selectChoice(i)}
-                    disabled={isPractice && ua.revealed}
+                    disabled={submitting || (isPractice && ua.revealed)}
                     className={`flex items-center gap-3.5 text-left w-full px-4 py-3 rounded-xl border-[1.5px] text-[.91rem] leading-relaxed transition ${style}`}
                   >
                     <span className="w-6 h-6 rounded-md bg-gray-200 flex items-center justify-center text-xs font-bold shrink-0">
