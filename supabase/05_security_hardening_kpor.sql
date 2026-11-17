@@ -522,6 +522,117 @@ revoke execute on function public.prevent_used_exam_set_question_changes() from 
 -- Keep historical attempts attached to their original exam set. The existing
 -- foreign key uses ON DELETE SET NULL, so block deletion before it can orphan
 -- an attempt and its result history.
+
+-- Freeze per-section scoring rules after an attempt starts. Section metadata is
+-- used to render historical per-section results, so it must remain immutable.
+create or replace function public.prevent_used_exam_set_section_changes()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_exam_set_id uuid;
+begin
+  if tg_op = 'UPDATE' then
+    if old.exam_set_id <= new.exam_set_id then
+      perform 1 from public.exam_sets where id = old.exam_set_id for update;
+      if new.exam_set_id is distinct from old.exam_set_id then
+        perform 1 from public.exam_sets where id = new.exam_set_id for update;
+      end if;
+    else
+      perform 1 from public.exam_sets where id = new.exam_set_id for update;
+      perform 1 from public.exam_sets where id = old.exam_set_id for update;
+    end if;
+
+    if exists (
+      select 1 from public.user_attempts where exam_set_id = old.exam_set_id
+    ) or exists (
+      select 1 from public.user_attempts where exam_set_id = new.exam_set_id
+    ) then
+      raise exception 'ชุดข้อสอบนี้มีประวัติการสอบแล้ว จึงเปลี่ยนเกณฑ์คะแนนรายหมวดไม่ได้';
+    end if;
+    return new;
+  end if;
+
+  if tg_op = 'DELETE' then
+    v_exam_set_id := old.exam_set_id;
+  else
+    v_exam_set_id := new.exam_set_id;
+  end if;
+
+  perform 1 from public.exam_sets where id = v_exam_set_id for update;
+
+  if exists (
+    select 1 from public.user_attempts where exam_set_id = v_exam_set_id
+  ) then
+    raise exception 'ชุดข้อสอบนี้มีประวัติการสอบแล้ว จึงเปลี่ยนเกณฑ์คะแนนรายหมวดไม่ได้';
+  end if;
+
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
+end;
+$function$;
+
+drop trigger if exists exam_set_sections_prevent_used_changes on public.exam_set_sections;
+create trigger exam_set_sections_prevent_used_changes
+before insert or update or delete on public.exam_set_sections
+for each row execute function public.prevent_used_exam_set_section_changes();
+
+revoke execute on function public.prevent_used_exam_set_section_changes() from public, anon, authenticated;
+
+-- Preserve exam metadata that affects historical result rendering and scoring.
+-- Publication can still be toggled, but exam identity/scoring settings cannot
+-- be edited after attempts exist.
+create or replace function public.prevent_used_exam_set_metadata_changes()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+begin
+  if row(
+    new.slug,
+    new.name,
+    new.description,
+    new.mode,
+    new.question_count,
+    new.max_score,
+    new.pass_score,
+    new.pass_pct_label,
+    new.time_limit_minutes,
+    new.is_gpa3,
+    new.source_round
+  ) is distinct from row(
+    old.slug,
+    old.name,
+    old.description,
+    old.mode,
+    old.question_count,
+    old.max_score,
+    old.pass_score,
+    old.pass_pct_label,
+    old.time_limit_minutes,
+    old.is_gpa3,
+    old.source_round
+  ) and exists (
+    select 1 from public.user_attempts where exam_set_id = old.id
+  ) then
+    raise exception 'ชุดข้อสอบนี้มีประวัติการสอบแล้ว จึงแก้ไขข้อมูลและเกณฑ์คะแนนไม่ได้';
+  end if;
+  return new;
+end;
+$function$;
+
+drop trigger if exists exam_sets_prevent_used_metadata_changes on public.exam_sets;
+create trigger exam_sets_prevent_used_metadata_changes
+before update on public.exam_sets
+for each row execute function public.prevent_used_exam_set_metadata_changes();
+
+revoke execute on function public.prevent_used_exam_set_metadata_changes() from public, anon, authenticated;
+
 create or replace function public.prevent_used_exam_set_deletion()
 returns trigger
 language plpgsql
