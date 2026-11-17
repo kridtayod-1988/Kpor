@@ -95,9 +95,10 @@ export default async function ExamPage({
     );
   }
 
-  const questionById = new Map<string, PublicQuestion>(
-    publicRows.map((question) => [question.id, question as PublicQuestion])
-  );
+  const questionById = new Map<string, PublicQuestion>();
+  for (const question of publicRows) {
+    questionById.set(question.id, question as PublicQuestion);
+  }
 
   // Preserve the position/points defined by exam_set_questions.
   const questions = (mappings ?? []).flatMap((mapping) => {
