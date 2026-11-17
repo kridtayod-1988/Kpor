@@ -14,7 +14,7 @@ export async function middleware(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          // Update the request cookie jar so Server Components see refreshed tokens.
+          // Update request cookies so Server Components see refreshed tokens.
           cookiesToSet.forEach(({ name, value }) => {
             request.cookies.set(name, value);
           });
