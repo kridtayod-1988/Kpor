@@ -112,7 +112,39 @@ export default function QuestionsTab() {
     setError(null);
   };
 
-  const handleEdit = (question: QuestionRow) => {
+  const handleEdit = async (question: QuestionRow) => {
+    setError(null);
+
+    // Editing a question already used in an attempt would rewrite historical
+    // review content. The database trigger in migration 05 enforces this too.
+    const { data: mappings, error: mappingError } = await supabase
+      .from("exam_set_questions")
+      .select("exam_set_id")
+      .eq("question_id", question.id);
+
+    if (mappingError) {
+      setError(mappingError.message);
+      return;
+    }
+
+    const examSetIds = [...new Set((mappings ?? []).map((mapping) => mapping.exam_set_id))];
+    if (examSetIds.length > 0) {
+      const { data: attempts, error: attemptError } = await supabase
+        .from("user_attempts")
+        .select("id")
+        .in("exam_set_id", examSetIds)
+        .limit(1);
+
+      if (attemptError) {
+        setError(attemptError.message);
+        return;
+      }
+      if (attempts && attempts.length > 0) {
+        setError("ข้อสอบนี้ถูกใช้ในประวัติการสอบแล้ว เพื่อรักษาผลย้อนหลัง กรุณาสร้างข้อสอบใหม่แทน");
+        return;
+      }
+    }
+
     const choices = question.choices ?? [];
     setForm({
       subcategory_id: question.subcategory_id,
@@ -126,7 +158,6 @@ export default function QuestionsTab() {
     });
     setEditingId(question.id);
     setShowForm(true);
-    setError(null);
   };
 
   const handleDelete = async (id: string) => {
@@ -305,7 +336,7 @@ export default function QuestionsTab() {
               </div>
               <button
                 type="button"
-                onClick={() => handleEdit(question)}
+                onClick={() => void handleEdit(question)}
                 className="shrink-0 px-3 py-1.5 bg-indigo-50 border border-indigo-200 rounded-lg text-indigo-700 text-xs font-semibold"
               >
                 แก้ไข
