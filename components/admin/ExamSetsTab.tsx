@@ -74,6 +74,7 @@ export default function ExamSetsTab() {
   const [assignmentsLoading, setAssignmentsLoading] = useState(false);
   const [questionsLoading, setQuestionsLoading] = useState(false);
   const [hasAttempts, setHasAttempts] = useState(false);
+  const [builderLoadFailed, setBuilderLoadFailed] = useState(false);
   const [questionSearch, setQuestionSearch] = useState("");
   const [questionFilter, setQuestionFilter] = useState("ALL");
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
@@ -84,7 +85,7 @@ export default function ExamSetsTab() {
   const selectedSet = sets.find((set) => set.id === selectedSetId) ?? null;
   const assignedIds = new Set(assigned.map((row) => row.id));
   const totalAssignedPoints = assigned.reduce((sum, row) => sum + Number(row.points || 0), 0);
-  const structureLocked = hasAttempts || Boolean(selectedSet?.is_published);
+  const structureLocked = builderLoadFailed || hasAttempts || Boolean(selectedSet?.is_published);
 
   const loadSets = async () => {
     setLoading(true);
@@ -118,6 +119,7 @@ export default function ExamSetsTab() {
 
   const loadAssignments = async (examSetId: string) => {
     setAssignmentsLoading(true);
+    setBuilderLoadFailed(true);
     setBuilderError(null);
 
     const [{ data: mappingRows, error: mappingError }, { data: attemptRows, error: attemptError }] =
@@ -137,7 +139,6 @@ export default function ExamSetsTab() {
     if (mappingError || attemptError) {
       setBuilderError(mappingError?.message ?? attemptError?.message ?? "โหลดชุดข้อสอบไม่สำเร็จ");
       setAssigned([]);
-      setHasAttempts(false);
       setAssignmentsLoading(false);
       return;
     }
@@ -146,6 +147,7 @@ export default function ExamSetsTab() {
     const mappings = (mappingRows as AssignmentRow[]) ?? [];
     if (mappings.length === 0) {
       setAssigned([]);
+      setBuilderLoadFailed(false);
       setAssignmentsLoading(false);
       return;
     }
@@ -168,6 +170,14 @@ export default function ExamSetsTab() {
       questionById.set(row.id, row);
     }
 
+    const missingQuestion = mappings.some((mapping) => !questionById.has(mapping.question_id));
+    if (missingQuestion) {
+      setBuilderError("มีรายการคำถามที่ผูกกับชุดนี้แต่ไม่สามารถโหลดข้อมูลได้ จึงล็อกการแก้ไขไว้ก่อน");
+      setAssigned([]);
+      setAssignmentsLoading(false);
+      return;
+    }
+
     setAssigned(
       mappings.flatMap((mapping) => {
         const question = questionById.get(mapping.question_id);
@@ -180,6 +190,7 @@ export default function ExamSetsTab() {
         }];
       })
     );
+    setBuilderLoadFailed(false);
     setAssignmentsLoading(false);
   };
 
@@ -668,6 +679,10 @@ export default function ExamSetsTab() {
           {hasAttempts ? (
             <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               ชุดข้อสอบนี้มีประวัติการสอบแล้ว ระบบล็อกการเพิ่ม ลบ เรียงลำดับ และเปลี่ยนคะแนนรายข้อ เพื่อรักษาผลย้อนหลัง
+            </div>
+          ) : builderLoadFailed ? (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              ไม่สามารถตรวจสอบข้อมูลชุดข้อสอบ/ประวัติการสอบได้ จึงปิดการแก้ไขไว้ก่อน กรุณารีเฟรชหรือแก้ไขการเชื่อมต่อแล้วลองใหม่
             </div>
           ) : selectedSet.is_published ? (
             <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
