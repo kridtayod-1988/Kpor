@@ -492,17 +492,21 @@ export default function ExamSetsTab() {
     setBusyQuestionId(null);
 
     if (third.error) {
-      const [restoreTarget, restoreCurrent] = await Promise.all([
-        supabase
-          .from("exam_set_questions")
-          .update({ position: target.position })
-          .eq("id", target.mappingId),
-        supabase
-          .from("exam_set_questions")
-          .update({ position: current.position })
-          .eq("id", current.mappingId),
-      ]);
-      const rollbackError = restoreTarget.error ?? restoreCurrent.error;
+      // Restore the target first to free the original position before putting
+      // the current row back. Run sequentially to avoid a unique-position race.
+      const restoreTarget = await supabase
+        .from("exam_set_questions")
+        .update({ position: target.position })
+        .eq("id", target.mappingId);
+
+      const restoreCurrent = restoreTarget.error
+        ? null
+        : await supabase
+            .from("exam_set_questions")
+            .update({ position: current.position })
+            .eq("id", current.mappingId);
+
+      const rollbackError = restoreTarget.error ?? restoreCurrent?.error;
       setBuilderError(
         rollbackError
           ? `การเรียงลำดับล้มเหลว และกู้คืนตำแหน่งเดิมไม่ครบ: ${rollbackError.message}`
