@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
-type ActionResult<T extends object = Record<string, never>> =
+type ActionResult<T = Record<never, never>> =
   | ({ success: true; error?: never } & T)
   | { success?: false; error: string };
 
