@@ -22,7 +22,7 @@ export default async function ExamPage({
   params: Promise<{ attemptId: string }>;
 }) {
   const { attemptId } = await params;
-  const supabase = createClient();
+  const supabase = await createClient();
 
   const {
     data: { user },
