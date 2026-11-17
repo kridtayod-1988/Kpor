@@ -44,6 +44,8 @@ Web App สำหรับฝึกและจำลองการสอบ �
 
 ไฟล์ migration ใหม่นี้ยังไม่ได้ถูกรันกับฐานข้อมูลใด
 
+migration 05 มีการ harden `SECURITY DEFINER` ด้วย `search_path` ว่างและระบุ schema ชัดเจน, ปฏิเสธค่าลงทะเบียนที่เป็น `NULL`, จำกัดการเรียก RPC และป้องกันการแก้คำถาม/ชุดข้อสอบย้อนหลัง อย่างไรก็ตาม CI ปัจจุบันตรวจเฉพาะ TypeScript และ Next.js build; SQL ยังต้องผ่าน staging test ก่อน apply จริง
+
 ## Authentication และ Environment Variables
 
 ตั้งค่าใน Vercel Environment Variables หรือไฟล์ local `.env.local`:
@@ -74,6 +76,9 @@ https://<your-domain>/auth/callback
 - คำนวณคะแนนแยกหมวดตาม `exam_set_questions.points` จริง
 - จำกัดการเปิดเฉลยให้เป็นข้อที่อยู่ในชุดสอบของ Attempt เจ้าของเท่านั้น
 - Admin Question CRUD รองรับเพิ่ม/แก้ไข/ลบ และป้องกันการแก้โจทย์ที่ถูกใช้ใน Attempt แล้วเพื่อคงความถูกต้องของประวัติ
+- เพิ่ม Exam Set Builder: ค้นหา/กรองคำถาม เพิ่ม-นำออก จัดลำดับ และกำหนดคะแนนรายข้อ; ชุดใหม่เป็นฉบับร่างและตรวจจำนวนข้อ/คะแนนก่อนเผยแพร่
+- ล็อกการเปลี่ยนคำถาม ลำดับ คะแนน และการลบชุดข้อสอบเมื่อมี Attempt แล้ว ทั้งในหน้า Admin และ Database Trigger
+- `start_attempt` ตรวจจำนวนคำถามที่ใช้งานได้และคะแนนรวมก่อนสร้าง Attempt พร้อมล็อกแถวชุดข้อสอบเพื่อป้องกันการแก้ชุดพร้อมกับเริ่มสอบ
 - จำกัด RPC เฉพาะผู้ใช้ที่เข้าสู่ระบบตามลักษณะการใช้งาน และเอาสิทธิ์ PUBLIC/anon ออกจากฟังก์ชัน Admin ที่ไม่ควรเปิดให้บุคคลทั่วไป
 - เพิ่มการตรวจ role ฝั่ง Server และตรวจ schema ของ JSON ที่ AI สร้างก่อนส่งกลับให้ Preview
 - ปิดตัวเลือก Google Sheets ชั่วคราวจนกว่าจะมีการเชื่อมต่ออ่านข้อมูลจริง
@@ -82,7 +87,6 @@ https://<your-domain>/auth/callback
 
 - เชื่อม Vercel เพื่อตรวจว่า Deployment จริงใช้ Supabase Project ใด
 - เพิ่ม CI ตรวจ TypeScript และ production build; ESLint ยังต้องตั้งค่า dependency/config ให้ครบก่อน
-- สร้าง UI จัดคำถามและลำดับใน Exam Set Builder
 - ทำ Google Sheets ingestion ด้วย OAuth/การอนุญาตที่เหมาะสม
 - ทำ Backup/Restore ให้ครอบคลุมทุกตาราง พร้อม validation และ rollback
 - เพิ่ม UX สำหรับสร้างสำเนาข้อสอบใหม่แทนการแก้ข้อสอบที่มีประวัติการสอบ และตรวจสอบ Auth redirect, rate limiting และ audit logging
