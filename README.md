@@ -73,6 +73,7 @@ https://<your-domain>/auth/callback
 - ส่งหน้าผลสอบโดยใช้ Attempt ID เดียวกัน
 - คำนวณคะแนนแยกหมวดตาม `exam_set_questions.points` จริง
 - จำกัดการเปิดเฉลยให้เป็นข้อที่อยู่ในชุดสอบของ Attempt เจ้าของเท่านั้น
+- Admin Question CRUD รองรับเพิ่ม/แก้ไข/ลบ และป้องกันการแก้โจทย์ที่ถูกใช้ใน Attempt แล้วเพื่อคงความถูกต้องของประวัติ
 - จำกัด RPC เฉพาะผู้ใช้ที่เข้าสู่ระบบตามลักษณะการใช้งาน และเอาสิทธิ์ PUBLIC/anon ออกจากฟังก์ชัน Admin ที่ไม่ควรเปิดให้บุคคลทั่วไป
 - เพิ่มการตรวจ role ฝั่ง Server และตรวจ schema ของ JSON ที่ AI สร้างก่อนส่งกลับให้ Preview
 - ปิดตัวเลือก Google Sheets ชั่วคราวจนกว่าจะมีการเชื่อมต่ออ่านข้อมูลจริง
@@ -81,11 +82,10 @@ https://<your-domain>/auth/callback
 
 - เชื่อม Vercel เพื่อตรวจว่า Deployment จริงใช้ Supabase Project ใด
 - เพิ่ม CI ตรวจ TypeScript และ production build; ESLint ยังต้องตั้งค่า dependency/config ให้ครบก่อน
-- ปรับปรุง Admin Question CRUD ให้แก้ไขข้อสอบเดิมได้
 - สร้าง UI จัดคำถามและลำดับใน Exam Set Builder
 - ทำ Google Sheets ingestion ด้วย OAuth/การอนุญาตที่เหมาะสม
 - ทำ Backup/Restore ให้ครอบคลุมทุกตาราง พร้อม validation และ rollback
-- ตรวจสอบ Auth redirect, cookie refresh, rate limiting และ audit logging
+- เพิ่ม UX สำหรับสร้างสำเนาข้อสอบใหม่แทนการแก้ข้อสอบที่มีประวัติการสอบ และตรวจสอบ Auth redirect, rate limiting และ audit logging
 - ทดสอบ RLS และ RPC ทุกบทบาทด้วยบัญชีผู้ใช้จริงใน staging
 
 ## Local development
