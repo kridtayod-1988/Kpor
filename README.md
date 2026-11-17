@@ -1,83 +1,98 @@
-# คลังข้อสอบจริง ก.พ. E-EXAM 2569 — Next.js Scaffold
+# ก.พ. E-EXAM 2569
 
-สแคฟโฟลด์นี้ครอบคลุมครบทุกส่วนหลักแล้ว: **Auth**, **หน้า 1/หน้า 2**, **หน้าสอบจริง + คำนวณคะแนนฝั่ง server**,
-**หน้าผลสอบ**, และ **Admin Panel ครบ 8 แท็บ**
+Web App สำหรับฝึกและจำลองการสอบ ก.พ. พัฒนาด้วย Next.js, React และ Supabase
 
-## ลำดับการติดตั้งฐานข้อมูล (สำคัญมาก ต้องรันตามลำดับ)
+> สถานะ: กำลังปรับปรุงบน branch `codex/eexam-2569-stabilization`
+> ยังไม่ deploy และยังไม่ apply migration ใด ๆ กับ Production
 
-รันใน Supabase SQL Editor ตามลำดับนี้:
+## Stack
 
-1. `supabase/01_schema.sql` (ไฟล์ schema หลักจากขั้นตอนก่อนหน้า — คัดลอกมาไว้ในโฟลเดอร์ `supabase/`)
-2. `supabase/02_scoring_functions.sql` — ฟังก์ชันคำนวณคะแนน + ล็อกไม่ให้ client อ่านเฉลยตรง ๆ
-3. `supabase/03_admin_functions.sql` — ฟังก์ชันสำหรับ Admin Panel (รหัสผ่าน, AI settings, สถิติ, รีเซ็ตคลัง)
+- Next.js 15.5.28
+- React 18.3.1
+- TypeScript
+- Supabase Auth, Postgres และ Row Level Security
+- `@supabase/ssr` สำหรับ session แบบ cookie
 
-> ⚠️ `02_scoring_functions.sql` จะ **ลบ policy เดิม** ที่อนุญาตให้ผู้ใช้ทั่วไปอ่านตาราง `questions` ได้ตรง ๆ
-> แล้วเปลี่ยนไปใช้ view `questions_public` (ไม่มีเฉลย) แทน — เพื่อป้องกันไม่ให้ผู้ใช้เปิด devtools แล้ว query
-> ตาราง `questions` เพื่อดูเฉลยก่อนส่งข้อสอบ ต้องรันไฟล์นี้ต่อจาก schema หลักเสมอ
+## โครงสร้างฐานข้อมูลที่แอปชุดนี้คาดหวัง
 
-## โครงสร้างไฟล์ที่เพิ่มเข้ามาในรอบนี้
+แอปปัจจุบันอ้างอิง schema กลุ่มนี้:
+
+- `profiles`, `subject_groups`, `subcategories`
+- `questions`, `questions_public`
+- `exam_sets`, `exam_set_sections`, `exam_set_questions`
+- `user_attempts`, `user_answers`
+- `ai_generation_logs`, `app_settings`
+
+เส้นทางการสอบต้องใช้ `user_attempts.id` เป็น Attempt ID ตั้งแต่เริ่มสอบจนถึงหน้าผลสอบ ส่วนโจทย์ระหว่างสอบอ่านผ่าน `questions_public` ซึ่งไม่ส่ง `correct_index` หรือ `explanation` ไปยัง Browser
+
+## สำคัญ: ตรวจสอบ Supabase ก่อน apply SQL
+
+พบ Supabase สองโปรเจกต์ที่มี schema ต่างกัน:
+
+- `kpor` ใช้ `subcategories`, `user_attempts`, `user_answers` ซึ่งตรงกับโค้ดแอปชุดนี้
+- `kp-exam-v4` ใช้ `categories`, `exam_attempts`, `question_text` ซึ่งเป็นอีก schema หนึ่ง ไม่ใช่ drop-in replacement
+
+อย่ารัน migration ของ schema หนึ่งกับอีกโปรเจกต์หนึ่ง และอย่ารันไฟล์ `supabase/04_adapt_existing_schema.sql` กับ schema แบบ `user_attempts` เพราะไฟล์ดังกล่าวออกแบบสำหรับตาราง `categories` / `exam_attempts` คนละชุด
+
+ไฟล์ `supabase/_legacy_original_design/` เป็นไฟล์ออกแบบ/ฐานเดิมที่เก็บไว้เป็นข้อมูลอ้างอิง ไม่ใช่คำสั่งให้รันซ้ำกับฐานข้อมูลที่มีอยู่แล้ว
+
+ก่อน apply `supabase/05_security_hardening_kpor.sql`:
+1. ยืนยัน Project URL/ID ของ Production จาก Vercel และ Supabase ให้ตรงกัน
+2. สำรองฐานข้อมูล
+3. ตรวจสอบ SQL กับ schema ของ target project อีกครั้ง
+4. apply ใน staging ก่อน แล้วทดสอบ Auth, เริ่มสอบ, บันทึกคำตอบ, เปิดเฉลยโหมดฝึก และส่งข้อสอบ
+
+ไฟล์ migration ใหม่นี้ยังไม่ได้ถูกรันกับฐานข้อมูลใด
+
+## Authentication และ Environment Variables
+
+ตั้งค่าใน Vercel Environment Variables หรือไฟล์ local `.env.local`:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+NEXT_PUBLIC_SITE_URL=
+```
+
+ใช้ publishable/anon key สำหรับ browser และ SSR client เท่านั้น ห้ามใส่ Service Role Key ในตัวแปรที่ขึ้นต้นด้วย `NEXT_PUBLIC_` หรือส่งกลับไปยัง client
+
+ต้องตั้งค่า Google OAuth Provider ใน Supabase Dashboard และตั้ง callback URL เป็น:
 
 ```
-supabase/02_scoring_functions.sql     -- upsert_answer, submit_attempt, questions_public view,
-                                          reveal_question_answer, get_attempt_review
-supabase/03_admin_functions.sql       -- verify_admin_password, update_admin_password,
-                                          get_ai_settings, update_ai_settings, get_ai_keys_internal,
-                                          get_question_bank_stats, admin_reset_question_bank
-
-app/(app)/exam/[setId]/page.tsx       -- โหลดคำถามแบบไม่มีเฉลย (questions_public) + สถานะ attempt เดิม
-components/ExamRunner.tsx             -- หน้าจอทำข้อสอบจริง: จับเวลา, navigator, flag, practice-mode reveal
-app/(app)/result/[attemptId]/page.tsx -- ดึงผลสอบ + get_attempt_review RPC
-components/ResultView.tsx             -- คะแนนรวม, เกณฑ์แยกส่วน GPA3, รีวิวคำตอบพร้อมตัวกรอง
-
-app/(admin)/admin/layout.tsx          -- guard ชั้นที่ 1: ต้องมี role='admin' ในฐานข้อมูล
-components/AdminGate.tsx              -- guard ชั้นที่ 2: ต้องใส่รหัสผ่าน Admin (ปลดล็อกต่อ browser tab)
-app/(admin)/admin/page.tsx            -- ประกอบ AdminGate + AdminDashboard
-components/admin/AdminDashboard.tsx   -- shell แท็บทั้ง 8
-components/admin/OverviewTab.tsx      -- สถิติคลังข้อสอบ + จำนวนผู้ใช้/ชุดข้อสอบ/การทำข้อสอบ
-components/admin/QuestionsTab.tsx     -- ค้นหา/กรอง/เพิ่ม/ลบคำถาม
-components/admin/AIGeneratorTab.tsx   -- ฟอร์มสร้างข้อสอบด้วย AI + พื้นที่พรีวิวก่อนบันทึก
-components/admin/UsersTab.tsx         -- ตารางผู้ใช้ + XP/Level
-components/admin/SettingsTab.tsx      -- AI provider, API keys, เปลี่ยนรหัสผ่าน Admin
-components/admin/BlueprintTab.tsx     -- แสดงโครงสร้างเกณฑ์แยกส่วน GPA3
-components/admin/ExamSetsTab.tsx      -- สร้าง/ลบ/ซ่อน-แสดงชุดข้อสอบ
-components/admin/DbTab.tsx            -- export/import JSON, รีเซ็ตคลังข้อสอบ
-app/api/admin/generate/route.ts       -- เรียก Gemini/Claude ฝั่ง server (คีย์ไม่ถูกส่งกลับ client)
+https://<your-domain>/auth/callback
 ```
 
-## จุดออกแบบด้านความปลอดภัยที่สำคัญ
+รวมทั้งกำหนด Site URL และ Redirect URLs ให้ตรงกับโดเมน Production และ localhost ที่ใช้งานจริง
 
-1. **เฉลยไม่รั่วระหว่างทำข้อสอบ** — ตาราง `questions` (มี `correct_index`/`explanation`) เปิดให้
-   admin เท่านั้น (`is_admin()`); ผู้ใช้ทั่วไปเห็นได้แค่ผ่าน view `questions_public` (ไม่มีเฉลย)
-   ยกเว้นโหมด `practice` ที่เปิดเฉลยได้ทันทีผ่านฟังก์ชัน `reveal_question_answer` (ตรวจสิทธิ์ในตัว)
-2. **คะแนนคำนวณฝั่ง server เสมอ** — ฟังก์ชัน `submit_attempt` (`SECURITY DEFINER`) เป็นผู้เดียวที่เขียน
-   `raw_score`/`passed`/`passed_sections` ป้องกันผู้ใช้ปลอมคะแนนจาก client
-3. **Admin Panel มี 2 ชั้นการป้องกัน** — role=`admin` ในฐานข้อมูล (ชั้น 1, กันที่ layout) และรหัสผ่าน
-   Admin แยกต่างหาก (ชั้น 2, `AdminGate` เรียก `verify_admin_password`) — ปลดล็อกแค่ในแท็บเบราว์เซอร์นั้น
-   (เก็บใน `sessionStorage`) ไม่ persist ข้ามอุปกรณ์
-4. **ไม่ต้องใช้ Service Role Key เลยในสแคฟโฟลด์นี้** — ทุกฟังก์ชัน admin (`update_ai_settings`,
-   `get_ai_keys_internal`, `admin_reset_question_bank` ฯลฯ) เป็น `SECURITY DEFINER` ที่ตรวจ `is_admin()`
-   ภายในตัวเอง จึงปลอดภัยพอที่จะ grant execute ให้ `authenticated` ได้ตรง ๆ (ไฟล์
-   `lib/supabase/admin.ts` ยังคงไว้เผื่อพัฒนาฟีเจอร์ที่ต้อง bypass RLS จริง ๆ ในอนาคต)
+## สิ่งที่ปรับปรุงใน branch นี้
 
-## จุดที่ยังไม่ได้ทำ / ต่อยอดได้อีก
+- เริ่มข้อสอบผ่าน RPC `start_attempt(p_exam_set_id)` เพื่อให้ฐานข้อมูลตรวจ Published Set และเงื่อนไขการยืนยันตัวตนก่อนสร้าง Attempt
+- ใช้ Attempt ID เป็น dynamic route key; ไม่ใช้ Exam Set ID ปะปนกับ Attempt ID
+- โหลดโจทย์จาก `questions_public` และเรียงตาม `exam_set_questions.position`
+- โหลดคำตอบเดิมจาก `user_answers` เพื่อรองรับการกลับมาทำข้อสอบต่อ
+- ส่งหน้าผลสอบโดยใช้ Attempt ID เดียวกัน
+- คำนวณคะแนนแยกหมวดตาม `exam_set_questions.points` จริง
+- จำกัดการเปิดเฉลยให้เป็นข้อที่อยู่ในชุดสอบของ Attempt เจ้าของเท่านั้น
+- จำกัด RPC เฉพาะผู้ใช้ที่เข้าสู่ระบบตามลักษณะการใช้งาน และเอาสิทธิ์ PUBLIC/anon ออกจากฟังก์ชัน Admin ที่ไม่ควรเปิดให้บุคคลทั่วไป
+- เพิ่มการตรวจ role ฝั่ง Server และตรวจ schema ของ JSON ที่ AI สร้างก่อนส่งกลับให้ Preview
+- ปิดตัวเลือก Google Sheets ชั่วคราวจนกว่าจะมีการเชื่อมต่ออ่านข้อมูลจริง
 
-- **UI จัดลำดับคำถามในชุดข้อสอบ** (`exam_set_questions`) — ตอนนี้ต้อง insert ตรงผ่าน SQL/Supabase
-  Table Editor เอง เมื่อสร้างชุดข้อสอบใหม่จากแท็บ "ชุดข้อสอบ"
-- **โหมด workshop/category แบบสุ่มข้อสอบสด ๆ** — ตอนนี้ทุกโหมดอ้างอิงแถวใน `exam_sets` ที่มีอยู่แล้ว
-  ยังไม่ได้ทำการ "ประกอบชุดข้อสอบชั่วคราว" จากหมวดที่ผู้ใช้เลือกเอง ณ runtime
-- **แก้ไขคำถามที่มีอยู่แล้ว** — แท็บคำถามตอนนี้ทำได้แค่ค้นหา/เพิ่ม/ลบ ยังไม่มีฟอร์มแก้ไข
-- **หน้า Login ของ Google OAuth ต้องตั้งค่า provider ใน Supabase Dashboard ก่อนใช้งานจริง**
-  (ดู README เดิมส่วน "วิธีติดตั้งและรันในเครื่อง")
+## งานที่ยังต้องทำต่อ
 
-## วิธีติดตั้งและรันในเครื่อง
+- เชื่อม Vercel เพื่อตรวจว่า Deployment จริงใช้ Supabase Project ใด
+- ทดสอบ build และ lint ด้วย dependency lockfile ของ Repository
+- ปรับปรุง Admin Question CRUD ให้แก้ไขข้อสอบเดิมได้
+- สร้าง UI จัดคำถามและลำดับใน Exam Set Builder
+- ทำ Google Sheets ingestion ด้วย OAuth/การอนุญาตที่เหมาะสม
+- ทำ Backup/Restore ให้ครอบคลุมทุกตาราง พร้อม validation และ rollback
+- ตรวจสอบ Auth redirect, cookie refresh, rate limiting และ audit logging
+- ทดสอบ RLS และ RPC ทุกบทบาทด้วยบัญชีผู้ใช้จริงใน staging
 
-1. รันไฟล์ SQL ทั้ง 3 ไฟล์ตามลำดับด้านบนใน Supabase SQL Editor
-2. ตั้งค่า Google OAuth provider ใน Supabase Dashboard → Authentication → Providers → Google
-3. คัดลอก `.env.example` เป็น `.env.local` แล้วใส่ค่าให้ครบ (รวม `GEMINI_API_KEY`/`CLAUDE_API_KEY`
-   เป็น optional — ถ้าไม่ใส่ใน env ให้ไปตั้งค่าผ่านแท็บ "การตั้งค่า" ใน Admin Panel แทนได้)
-4. `npm install && npm run dev`
-5. ตั้ง `profiles.role = 'admin'` ให้ผู้ใช้ของคุณเองผ่าน Supabase SQL Editor เพื่อเข้าถึง Admin Panel:
-   ```sql
-   update profiles set role = 'admin' where id = '<your-user-uuid>';
-   ```
-6. เข้า `/admin` → กรอกรหัสผ่านเริ่มต้น `แอดมิน123` (เปลี่ยนทันทีในแท็บ "การตั้งค่า")
+## Local development
+
+```bash
+npm install
+npm run dev
+```
+
+ก่อนเปิดให้ผู้สอบใช้งานจริง ต้องผ่าน `npm run build`, lint, และชุดทดสอบการเริ่มสอบ/บันทึกคำตอบ/ส่งข้อสอบ/ตรวจผล โดยใช้ Supabase staging ที่มี schema และ seed data ตรงกับแอป
