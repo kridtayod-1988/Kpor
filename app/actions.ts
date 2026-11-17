@@ -3,7 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
-export async function acceptTermsAction(termsVersionId: string) {
+type ActionResult<T extends object = Record<string, never>> =
+  | ({ success: true; error?: never } & T)
+  | { success?: false; error: string };
+
+export async function acceptTermsAction(termsVersionId: string): Promise<ActionResult> {
   const supabase = createClient();
   const {
     data: { user },
@@ -30,7 +34,9 @@ export async function acceptTermsAction(termsVersionId: string) {
  * requirements, and creates the attempt atomically. Do not insert directly
  * into user_attempts from the browser/server action.
  */
-export async function startAttemptAction(examSetId: string) {
+export async function startAttemptAction(
+  examSetId: string
+): Promise<ActionResult<{ attemptId: string }>> {
   const supabase = createClient();
   const {
     data: { user },
@@ -56,7 +62,7 @@ export async function saveAnswerAction(
   questionId: string,
   selectedIndex: number | null,
   isFlagged: boolean
-) {
+): Promise<ActionResult> {
   const supabase = createClient();
   const { error } = await supabase.rpc("upsert_answer", {
     p_attempt_id: attemptId,
@@ -68,7 +74,9 @@ export async function saveAnswerAction(
   return { success: true };
 }
 
-export async function submitAttemptAction(attemptId: string) {
+export async function submitAttemptAction(
+  attemptId: string
+): Promise<ActionResult<{ result: unknown }>> {
   const supabase = createClient();
   const { data, error } = await supabase.rpc("submit_attempt", {
     p_attempt_id: attemptId,
@@ -79,7 +87,10 @@ export async function submitAttemptAction(attemptId: string) {
   return { success: true, result };
 }
 
-export async function revealAnswerAction(questionId: string, attemptId: string) {
+export async function revealAnswerAction(
+  questionId: string,
+  attemptId: string
+): Promise<ActionResult<{ correctIndex: number; explanation: string }>> {
   const supabase = createClient();
   const { data, error } = await supabase.rpc("reveal_question_answer", {
     p_question_id: questionId,
