@@ -2,6 +2,19 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ResultView from "@/components/ResultView";
 
+type AttemptReviewRow = {
+  question_id: string;
+  subcategory_id: string;
+  text: string;
+  passage: string | null;
+  choices: string[];
+  correct_index: number;
+  explanation: string;
+  selected_index: number | null;
+  is_flagged: boolean;
+  is_correct: boolean | null;
+};
+
 export default async function ResultPage({
   params,
 }: {
@@ -56,7 +69,8 @@ export default async function ResultPage({
   for (const item of questionMappings ?? []) {
     pointsByQuestion.set(item.question_id, Number(item.points ?? 0));
   }
-  const reviewWithPoints = (review ?? []).map((row) => ({
+  const reviewRows = (review ?? []) as AttemptReviewRow[];
+  const reviewWithPoints = reviewRows.map((row) => ({
     ...row,
     points: pointsByQuestion.get(row.question_id) ?? 0,
   }));
