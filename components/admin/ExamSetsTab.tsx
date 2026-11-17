@@ -84,6 +84,7 @@ export default function ExamSetsTab() {
   const selectedSet = sets.find((set) => set.id === selectedSetId) ?? null;
   const assignedIds = new Set(assigned.map((row) => row.id));
   const totalAssignedPoints = assigned.reduce((sum, row) => sum + Number(row.points || 0), 0);
+  const structureLocked = hasAttempts || Boolean(selectedSet?.is_published);
 
   const loadSets = async () => {
     setLoading(true);
@@ -262,8 +263,8 @@ export default function ExamSetsTab() {
       setError("จำนวนข้อต้องเป็นจำนวนเต็มอย่างน้อย 1 ข้อ");
       return;
     }
-    if (!Number.isFinite(maxScore) || maxScore <= 0 || !Number.isFinite(passScore) || passScore < 0 || passScore > maxScore) {
-      setError("ตรวจสอบคะแนนเต็มและเกณฑ์ผ่านอีกครั้ง");
+    if (!Number.isInteger(maxScore) || maxScore <= 0 || !Number.isInteger(passScore) || passScore < 0 || passScore > maxScore) {
+      setError("คะแนนเต็มและเกณฑ์ผ่านต้องเป็นจำนวนเต็ม โดยเกณฑ์ผ่านต้องไม่เกินคะแนนเต็ม");
       return;
     }
     if (!Number.isInteger(timeLimit) || timeLimit < 0) {
@@ -304,6 +305,11 @@ export default function ExamSetsTab() {
   };
 
   const handleDelete = async (examSetId: string) => {
+    const targetSet = sets.find((set) => set.id === examSetId);
+    if (targetSet?.is_published) {
+      setError("กรุณาซ่อนชุดข้อสอบก่อนลบ");
+      return;
+    }
     const { data: attempts, error: attemptError } = await supabase
       .from("user_attempts")
       .select("id")
@@ -363,7 +369,7 @@ export default function ExamSetsTab() {
   };
 
   const addSelectedQuestions = async () => {
-    if (!selectedSet || hasAttempts || selectedQuestionIds.length === 0) return;
+    if (!selectedSet || structureLocked || selectedQuestionIds.length === 0) return;
     setBuilderError(null);
     setBuilderMessage(null);
 
@@ -396,7 +402,7 @@ export default function ExamSetsTab() {
   };
 
   const removeAssignedQuestion = async (row: AssignedQuestion) => {
-    if (!selectedSet || hasAttempts) return;
+    if (!selectedSet || structureLocked) return;
     setBusyQuestionId(row.mappingId);
     setBuilderError(null);
     const { error: deleteError } = await supabase
@@ -415,7 +421,7 @@ export default function ExamSetsTab() {
   };
 
   const moveAssignedQuestion = async (index: number, direction: -1 | 1) => {
-    if (!selectedSet || hasAttempts) return;
+    if (!selectedSet || structureLocked) return;
     const targetIndex = index + direction;
     if (targetIndex < 0 || targetIndex >= assigned.length) return;
 
@@ -464,7 +470,12 @@ export default function ExamSetsTab() {
   };
 
   const updatePoints = async (row: AssignedQuestion, value: number) => {
-    if (!selectedSet || hasAttempts || !Number.isFinite(value) || value <= 0) return;
+    if (!selectedSet || structureLocked) return;
+    if (!Number.isFinite(value) || value <= 0) {
+      setBuilderError("คะแนนรายข้อต้องมากกว่า 0");
+      await loadAssignments(selectedSet.id);
+      return;
+    }
     setBusyQuestionId(row.mappingId);
     setBuilderError(null);
 
@@ -552,7 +563,7 @@ export default function ExamSetsTab() {
                   <input
                     type="number"
                     min={1}
-                    step="0.5"
+                    step="1"
                     value={form.max_score}
                     onChange={(event) => setForm((current) => ({ ...current, max_score: Number(event.target.value) }))}
                     className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
@@ -563,7 +574,7 @@ export default function ExamSetsTab() {
                   <input
                     type="number"
                     min={0}
-                    step="0.5"
+                    step="1"
                     value={form.pass_score}
                     onChange={(event) => setForm((current) => ({ ...current, pass_score: Number(event.target.value) }))}
                     className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
@@ -654,11 +665,15 @@ export default function ExamSetsTab() {
             </div>
           </div>
 
-          {hasAttempts && (
+          {hasAttempts ? (
             <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               ชุดข้อสอบนี้มีประวัติการสอบแล้ว ระบบล็อกการเพิ่ม ลบ เรียงลำดับ และเปลี่ยนคะแนนรายข้อ เพื่อรักษาผลย้อนหลัง
             </div>
-          )}
+          ) : selectedSet.is_published ? (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              ชุดข้อสอบกำลังเผยแพร่อยู่ หากต้องการเปลี่ยนคำถามหรือลำดับ ให้กด “ซ่อนชุดข้อสอบ” ก่อน
+            </div>
+          ) : null}
           {builderError && <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">{builderError}</div>}
           {builderMessage && <div className="rounded-lg bg-green-50 border border-green-200 px-3 py-2 text-xs text-green-700">{builderMessage}</div>}
 
@@ -672,7 +687,7 @@ export default function ExamSetsTab() {
               <div className="text-[11px] text-gray-500">คะแนนที่จัด / {selectedSet.max_score}</div>
             </div>
             <div className="rounded-xl border border-gray-200 bg-white p-3 text-center">
-              <div className="text-xl font-black text-gray-900">{hasAttempts ? "ล็อก" : "แก้ไขได้"}</div>
+              <div className="text-xl font-black text-gray-900">{structureLocked ? "ล็อก" : "แก้ไขได้"}</div>
               <div className="text-[11px] text-gray-500">สถานะชุดข้อสอบ</div>
             </div>
           </div>
@@ -706,7 +721,7 @@ export default function ExamSetsTab() {
                         min="0.1"
                         step="0.1"
                         value={row.points}
-                        disabled={hasAttempts || busyQuestionId === row.mappingId}
+                        disabled={structureLocked || busyQuestionId === row.mappingId}
                         onChange={(event) => {
                           const value = Number(event.target.value);
                           setAssigned((previous) => previous.map((item) =>
@@ -718,9 +733,9 @@ export default function ExamSetsTab() {
                       />
                     </label>
                     <div className="flex flex-col gap-1">
-                      <button type="button" title="เลื่อนขึ้น" aria-label="เลื่อนคำถามขึ้น" disabled={hasAttempts || index === 0 || busyQuestionId !== null} onClick={() => void moveAssignedQuestion(index, -1)} className="px-2 py-1 rounded bg-gray-100 text-xs disabled:opacity-30">↑</button>
-                      <button type="button" title="เลื่อนลง" aria-label="เลื่อนคำถามลง" disabled={hasAttempts || index === assigned.length - 1 || busyQuestionId !== null} onClick={() => void moveAssignedQuestion(index, 1)} className="px-2 py-1 rounded bg-gray-100 text-xs disabled:opacity-30">↓</button>
-                      <button type="button" title="นำออกจากชุด" aria-label="นำคำถามออกจากชุด" disabled={hasAttempts || busyQuestionId !== null} onClick={() => void removeAssignedQuestion(row)} className="px-2 py-1 rounded bg-red-50 text-red-600 text-xs disabled:opacity-30">×</button>
+                      <button type="button" title="เลื่อนขึ้น" aria-label="เลื่อนคำถามขึ้น" disabled={structureLocked || index === 0 || busyQuestionId !== null} onClick={() => void moveAssignedQuestion(index, -1)} className="px-2 py-1 rounded bg-gray-100 text-xs disabled:opacity-30">↑</button>
+                      <button type="button" title="เลื่อนลง" aria-label="เลื่อนคำถามลง" disabled={structureLocked || index === assigned.length - 1 || busyQuestionId !== null} onClick={() => void moveAssignedQuestion(index, 1)} className="px-2 py-1 rounded bg-gray-100 text-xs disabled:opacity-30">↓</button>
+                      <button type="button" title="นำออกจากชุด" aria-label="นำคำถามออกจากชุด" disabled={structureLocked || busyQuestionId !== null} onClick={() => void removeAssignedQuestion(row)} className="px-2 py-1 rounded bg-red-50 text-red-600 text-xs disabled:opacity-30">×</button>
                     </div>
                   </div>
                 ))}
@@ -739,13 +754,13 @@ export default function ExamSetsTab() {
                 onChange={(event) => setQuestionSearch(event.target.value)}
                 placeholder="ค้นหาจากข้อความคำถาม..."
                 className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                disabled={hasAttempts}
+                disabled={structureLocked}
               />
               <select
                 value={questionFilter}
                 onChange={(event) => setQuestionFilter(event.target.value)}
                 className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
-                disabled={hasAttempts}
+                disabled={structureLocked}
               >
                 <option value="ALL">ทุกหมวดวิชา</option>
                 {subcategories.map((subcategory) => (
@@ -754,8 +769,10 @@ export default function ExamSetsTab() {
               </select>
             </div>
 
-            {hasAttempts ? (
-              <p className="text-xs text-gray-400 py-4 text-center">ไม่สามารถเปลี่ยนชุดคำถามหลังมีผู้เริ่มสอบแล้ว</p>
+            {structureLocked ? (
+              <p className="text-xs text-gray-400 py-4 text-center">
+                {hasAttempts ? "ไม่สามารถเปลี่ยนชุดคำถามหลังมีผู้เริ่มสอบแล้ว" : "กรุณาซ่อนชุดข้อสอบก่อนเปลี่ยนชุดคำถาม"}
+              </p>
             ) : questionsLoading ? (
               <p className="text-sm text-gray-400 py-6 text-center">กำลังค้นหาคลังข้อสอบ...</p>
             ) : availableNotAssigned.length === 0 ? (
@@ -792,7 +809,7 @@ export default function ExamSetsTab() {
                   <span className="text-xs text-gray-500">เลือกแล้ว {selectedQuestionIds.length} ข้อ · เพิ่มได้อีก {Math.max(selectedSet.question_count - assigned.length, 0)} ข้อ</span>
                   <button
                     type="button"
-                    disabled={saving || selectedQuestionIds.length === 0}
+                    disabled={saving || structureLocked || selectedQuestionIds.length === 0}
                     onClick={() => void addSelectedQuestions()}
                     className="px-4 py-2 bg-indigo rounded-lg text-white text-xs font-bold disabled:opacity-40"
                   >
