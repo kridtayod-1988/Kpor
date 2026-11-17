@@ -80,7 +80,7 @@ https://<your-domain>/auth/callback
 ## งานที่ยังต้องทำต่อ
 
 - เชื่อม Vercel เพื่อตรวจว่า Deployment จริงใช้ Supabase Project ใด
-- ทดสอบ build และ lint ด้วย dependency lockfile ของ Repository
+- เพิ่ม CI ตรวจ TypeScript และ production build; ESLint ยังต้องตั้งค่า dependency/config ให้ครบก่อน
 - ปรับปรุง Admin Question CRUD ให้แก้ไขข้อสอบเดิมได้
 - สร้าง UI จัดคำถามและลำดับใน Exam Set Builder
 - ทำ Google Sheets ingestion ด้วย OAuth/การอนุญาตที่เหมาะสม
@@ -95,4 +95,4 @@ npm install
 npm run dev
 ```
 
-ก่อนเปิดให้ผู้สอบใช้งานจริง ต้องผ่าน `npm run build`, lint, และชุดทดสอบการเริ่มสอบ/บันทึกคำตอบ/ส่งข้อสอบ/ตรวจผล โดยใช้ Supabase staging ที่มี schema และ seed data ตรงกับแอป
+ก่อนเปิดให้ผู้สอบใช้งานจริง ต้องผ่าน `npx tsc --noEmit`, `npm run build` และชุดทดสอบการเริ่มสอบ/บันทึกคำตอบ/ส่งข้อสอบ/ตรวจผล โดยใช้ Supabase staging ที่มี schema และ seed data ตรงกับแอป ปัจจุบัน Repository ยังไม่มี ESLint dependency/config จึงยังไม่รวม ESLint ใน CI
