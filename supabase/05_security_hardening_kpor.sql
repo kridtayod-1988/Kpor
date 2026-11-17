@@ -391,6 +391,67 @@ for each row execute function public.prevent_used_question_edits();
 
 revoke execute on function public.prevent_used_question_edits() from public, anon, authenticated;
 
+
+-- Starting an exam and editing its question map must serialize on the same
+-- exam_sets row. The row lock prevents a concurrent builder write from racing
+-- with the attempt snapshot.
+create or replace function public.start_attempt(p_exam_set_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_set public.exam_sets%rowtype;
+  v_attempt_id uuid;
+  v_question_count integer;
+  v_total_points numeric;
+begin
+  if auth.uid() is null then
+    raise exception 'กรุณาเข้าสู่ระบบ';
+  end if;
+
+  select *
+    into v_set
+    from public.exam_sets
+   where id = p_exam_set_id
+     and (is_published or public.is_admin())
+   for update;
+
+  if not found then
+    raise exception 'ไม่พบชุดข้อสอบ';
+  end if;
+
+  if v_set.mode <> 'practice'
+     and not public.is_verified()
+     and not public.is_admin() then
+    raise exception 'ต้องยืนยันตัวตนให้สำเร็จก่อนเข้าสอบโหมดนี้';
+  end if;
+
+  select count(q.id), coalesce(sum(esq.points), 0)
+    into v_question_count, v_total_points
+    from public.exam_set_questions esq
+    join public.questions q on q.id = esq.question_id
+   where esq.exam_set_id = p_exam_set_id
+     and q.is_active = true;
+
+  if v_question_count = 0
+     or v_question_count <> v_set.question_count
+     or abs(v_total_points - v_set.max_score::numeric) > 0.0001 then
+    raise exception 'ชุดข้อสอบยังจัดคำถามไม่ครบ หรือคะแนนรวมไม่ตรงกับคะแนนเต็ม';
+  end if;
+
+  insert into public.user_attempts (user_id, exam_set_id, mode)
+  values (auth.uid(), p_exam_set_id, v_set.mode)
+  returning id into v_attempt_id;
+
+  return v_attempt_id;
+end;
+$function$;
+
+revoke execute on function public.start_attempt(uuid) from public, anon;
+grant execute on function public.start_attempt(uuid) to authenticated;
+
 -- --------------------------------------------------------------------------
 -- A started attempt freezes the question mapping, order, and points of a set.
 -- The UI checks this too, but the trigger is the authoritative DB guard.
@@ -406,12 +467,21 @@ declare
   v_exam_set_id uuid;
 begin
   if tg_op = 'UPDATE' then
+    -- Lock parent rows in a deterministic order when a mapping is moved.
+    if old.exam_set_id <= new.exam_set_id then
+      perform 1 from public.exam_sets where id = old.exam_set_id for update;
+      if new.exam_set_id is distinct from old.exam_set_id then
+        perform 1 from public.exam_sets where id = new.exam_set_id for update;
+      end if;
+    else
+      perform 1 from public.exam_sets where id = new.exam_set_id for update;
+      perform 1 from public.exam_sets where id = old.exam_set_id for update;
+    end if;
+
     if exists (
-      select 1 from public.user_attempts
-       where exam_set_id = old.exam_set_id
+      select 1 from public.user_attempts where exam_set_id = old.exam_set_id
     ) or exists (
-      select 1 from public.user_attempts
-       where exam_set_id = new.exam_set_id
+      select 1 from public.user_attempts where exam_set_id = new.exam_set_id
     ) then
       raise exception 'ชุดข้อสอบนี้มีประวัติการสอบแล้ว จึงเปลี่ยนคำถาม ลำดับ หรือคะแนนไม่ได้';
     end if;
@@ -423,6 +493,9 @@ begin
   else
     v_exam_set_id := new.exam_set_id;
   end if;
+
+  -- Serialize INSERT/DELETE with start_attempt() on this parent row.
+  perform 1 from public.exam_sets where id = v_exam_set_id for update;
 
   if exists (
     select 1
