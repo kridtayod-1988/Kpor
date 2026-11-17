@@ -92,4 +92,64 @@ revoke execute on function public.award_xp_on_finish() from public, anon, authen
 revoke execute on function public.handle_new_user() from public, anon, authenticated;
 revoke execute on function public.rls_auto_enable() from public, anon, authenticated;
 
+
+-- Protect historical exam results: once a question has appeared in any attempt,
+-- changing its prompt/options/answer/explanation would rewrite what past users saw.
+create or replace function public.prevent_used_question_edits()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+begin
+  if row(
+    new.subcategory_id,
+    new.text,
+    new.passage,
+    new.choices,
+    new.correct_index,
+    new.explanation,
+    new.difficulty,
+    new.source_round,
+    new.is_active,
+    new.question_type,
+    new.answer_data,
+    new.media,
+    new.content_format,
+    new.bloom_level
+  ) is distinct from row(
+    old.subcategory_id,
+    old.text,
+    old.passage,
+    old.choices,
+    old.correct_index,
+    old.explanation,
+    old.difficulty,
+    old.source_round,
+    old.is_active,
+    old.question_type,
+    old.answer_data,
+    old.media,
+    old.content_format,
+    old.bloom_level
+  ) and exists (
+    select 1
+      from public.exam_set_questions esq
+      join public.user_attempts ua on ua.exam_set_id = esq.exam_set_id
+     where esq.question_id = old.id
+  ) then
+    raise exception 'ข้อสอบนี้มีประวัติการสอบแล้ว จึงแก้ไขไม่ได้ กรุณาสร้างข้อสอบใหม่แทน';
+  end if;
+
+  return new;
+end;
+$function$;
+
+drop trigger if exists questions_prevent_used_edits on public.questions;
+create trigger questions_prevent_used_edits
+before update on public.questions
+for each row execute function public.prevent_used_question_edits();
+
+revoke execute on function public.prevent_used_question_edits() from public, anon, authenticated;
+
 commit;
