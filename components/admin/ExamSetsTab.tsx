@@ -337,7 +337,7 @@ export default function ExamSetsTab() {
   };
 
   const togglePublish = async () => {
-    if (!selectedSet) return;
+    if (!selectedSet || busyQuestionId !== null) return;
     setBuilderError(null);
     setBuilderMessage(null);
 
@@ -657,7 +657,7 @@ export default function ExamSetsTab() {
               <button
                 type="button"
                 onClick={() => void togglePublish()}
-                disabled={saving || assignmentsLoading}
+                disabled={saving || assignmentsLoading || busyQuestionId !== null}
                 className="px-3.5 py-2 rounded-lg bg-indigo text-white text-xs font-bold disabled:opacity-50"
               >
                 {selectedSet.is_published ? "ซ่อนชุดข้อสอบ" : "ตรวจและเผยแพร่"}
