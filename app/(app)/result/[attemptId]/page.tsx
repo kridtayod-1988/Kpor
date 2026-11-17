@@ -52,9 +52,10 @@ export default async function ResultPage({
   ]);
 
   // Preserve the configured points per question for section-level GPA3 scoring.
-  const pointsByQuestion = new Map(
-    (questionMappings ?? []).map((item) => [item.question_id, Number(item.points ?? 0)])
-  );
+  const pointsByQuestion = new Map<string, number>();
+  for (const item of questionMappings ?? []) {
+    pointsByQuestion.set(item.question_id, Number(item.points ?? 0));
+  }
   const reviewWithPoints = (review ?? []).map((row) => ({
     ...row,
     points: pointsByQuestion.get(row.question_id) ?? 0,
