@@ -35,12 +35,17 @@ export default function ConfirmStartModal({
   const handleConfirm = () => {
     setError(null);
     startTransition(async () => {
-      const res = await startAttemptAction(examSet.id, examSet.mode);
+      const res = await startAttemptAction(examSet.id);
       if (res?.error) {
         setError(res.error);
         return;
       }
-      router.push(`/exam/${examSet.id}?attempt=${res.attemptId}`);
+      if (!res.attemptId) {
+        setError("ระบบไม่สามารถสร้างรหัสการสอบได้ กรุณาลองใหม่");
+        return;
+      }
+      // The dynamic route is keyed by the attempt ID, not by the exam-set ID.
+      router.push(`/exam/${res.attemptId}`);
     });
   };
 
