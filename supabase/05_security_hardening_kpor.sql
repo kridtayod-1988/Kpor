@@ -340,6 +340,8 @@ language plpgsql
 security definer
 set search_path = ''
 as $function$
+declare
+  v_exam_set_id uuid;
 begin
   if row(
     new.subcategory_id,
@@ -371,13 +373,30 @@ begin
     old.media,
     old.content_format,
     old.bloom_level
-  ) and exists (
-    select 1
-      from public.exam_set_questions esq
-      join public.user_attempts ua on ua.exam_set_id = esq.exam_set_id
-     where esq.question_id = old.id
   ) then
-    raise exception 'ข้อสอบนี้มีประวัติการสอบแล้ว จึงแก้ไขไม่ได้ กรุณาสร้างข้อสอบใหม่แทน';
+    -- Lock all exam-set parent rows in deterministic order. start_attempt()
+    -- takes the same row lock before creating an attempt, preventing edits
+    -- from racing with the first attempt on a set that uses this question.
+    for v_exam_set_id in
+      select distinct esq.exam_set_id
+        from public.exam_set_questions esq
+       where esq.question_id = old.id
+       order by esq.exam_set_id
+    loop
+      perform 1
+        from public.exam_sets
+       where id = v_exam_set_id
+       for update;
+    end loop;
+
+    if exists (
+      select 1
+        from public.exam_set_questions esq
+        join public.user_attempts ua on ua.exam_set_id = esq.exam_set_id
+       where esq.question_id = old.id
+    ) then
+      raise exception 'ข้อสอบนี้มีประวัติการสอบแล้ว จึงแก้ไขไม่ได้ กรุณาสร้างข้อสอบใหม่แทน';
+    end if;
   end if;
 
   return new;
