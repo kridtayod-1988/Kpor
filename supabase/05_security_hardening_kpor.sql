@@ -233,6 +233,7 @@ $function$;
 -- These helpers only use PostgreSQL built-ins and can use an empty path.
 alter function public.set_updated_at() set search_path = '';
 revoke execute on function public.set_updated_at() from public, anon, authenticated;
+revoke execute on function public.thai_citizen_id_valid(text) from public, anon, authenticated;
 revoke execute on function public.protect_profile_columns() from public, anon, authenticated;
 
 -- --------------------------------------------------------------------------
