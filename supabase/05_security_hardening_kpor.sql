@@ -395,6 +395,24 @@ revoke execute on function public.prevent_used_question_edits() from public, ano
 -- Starting an exam and editing its question map must serialize on the same
 -- exam_sets row. The row lock prevents a concurrent builder write from racing
 -- with the attempt snapshot.
+create or replace function public.is_verified()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $function$
+  select exists (
+    select 1
+      from public.profiles
+     where id = auth.uid()
+       and verification_status = 'verified'
+  );
+$function$;
+
+revoke execute on function public.is_verified() from public, anon;
+grant execute on function public.is_verified() to authenticated;
+
 create or replace function public.start_attempt(p_exam_set_id uuid)
 returns uuid
 language plpgsql
