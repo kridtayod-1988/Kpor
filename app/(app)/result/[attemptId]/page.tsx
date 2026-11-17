@@ -2,25 +2,31 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ResultView from "@/components/ResultView";
 
-export default async function ResultPage({ params }: { params: { attemptId: string } }) {
+export default async function ResultPage({
+  params,
+}: {
+  params: Promise<{ attemptId: string }>;
+}) {
+  const { attemptId } = await params;
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
   if (!user) redirect("/login");
 
   const { data: attempt } = await supabase
     .from("user_attempts")
     .select("*")
-    .eq("id", params.attemptId)
+    .eq("id", attemptId)
     .eq("user_id", user.id)
     .single();
 
   if (!attempt) redirect("/exam-sets");
 
-  // ยังไม่ได้ส่งข้อสอบ -> กลับไปหน้าสอบต่อ
+  // An unfinished attempt must be resumed using its attempt ID.
   if (!attempt.finished_at) {
-    redirect(`/exam/${attempt.exam_set_id}?attempt=${attempt.id}`);
+    redirect(`/exam/${attempt.id}`);
   }
 
   const { data: examSet } = await supabase
@@ -38,7 +44,7 @@ export default async function ResultPage({ params }: { params: { attemptId: stri
     : { data: [] };
 
   const { data: review } = await supabase.rpc("get_attempt_review", {
-    p_attempt_id: params.attemptId,
+    p_attempt_id: attemptId,
   });
 
   return (
