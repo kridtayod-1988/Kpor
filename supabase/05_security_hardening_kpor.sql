@@ -391,4 +391,86 @@ for each row execute function public.prevent_used_question_edits();
 
 revoke execute on function public.prevent_used_question_edits() from public, anon, authenticated;
 
+-- --------------------------------------------------------------------------
+-- A started attempt freezes the question mapping, order, and points of a set.
+-- The UI checks this too, but the trigger is the authoritative DB guard.
+-- --------------------------------------------------------------------------
+
+create or replace function public.prevent_used_exam_set_question_changes()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_exam_set_id uuid;
+begin
+  if tg_op = 'UPDATE' then
+    if exists (
+      select 1 from public.user_attempts
+       where exam_set_id = old.exam_set_id
+    ) or exists (
+      select 1 from public.user_attempts
+       where exam_set_id = new.exam_set_id
+    ) then
+      raise exception 'ชุดข้อสอบนี้มีประวัติการสอบแล้ว จึงเปลี่ยนคำถาม ลำดับ หรือคะแนนไม่ได้';
+    end if;
+    return new;
+  end if;
+
+  if tg_op = 'DELETE' then
+    v_exam_set_id := old.exam_set_id;
+  else
+    v_exam_set_id := new.exam_set_id;
+  end if;
+
+  if exists (
+    select 1
+      from public.user_attempts
+     where exam_set_id = v_exam_set_id
+  ) then
+    raise exception 'ชุดข้อสอบนี้มีประวัติการสอบแล้ว จึงเปลี่ยนคำถาม ลำดับ หรือคะแนนไม่ได้';
+  end if;
+
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
+end;
+$function$;
+
+drop trigger if exists exam_set_questions_prevent_used_changes on public.exam_set_questions;
+create trigger exam_set_questions_prevent_used_changes
+before insert or update or delete on public.exam_set_questions
+for each row execute function public.prevent_used_exam_set_question_changes();
+
+revoke execute on function public.prevent_used_exam_set_question_changes() from public, anon, authenticated;
+
+-- Keep historical attempts attached to their original exam set. The existing
+-- foreign key uses ON DELETE SET NULL, so block deletion before it can orphan
+-- an attempt and its result history.
+create or replace function public.prevent_used_exam_set_deletion()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+begin
+  if exists (
+    select 1
+      from public.user_attempts
+     where exam_set_id = old.id
+  ) then
+    raise exception 'ชุดข้อสอบนี้มีประวัติการสอบแล้ว จึงลบไม่ได้';
+  end if;
+  return old;
+end;
+$function$;
+
+drop trigger if exists exam_sets_prevent_used_deletion on public.exam_sets;
+create trigger exam_sets_prevent_used_deletion
+before delete on public.exam_sets
+for each row execute function public.prevent_used_exam_set_deletion();
+
+revoke execute on function public.prevent_used_exam_set_deletion() from public, anon, authenticated;
 commit;
