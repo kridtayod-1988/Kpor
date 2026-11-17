@@ -253,6 +253,8 @@ export default function ExamSetsTab() {
     setQuestionFilter("ALL");
     setBuilderError(null);
     setBuilderMessage(null);
+    // Lock controls immediately while history and mappings are being verified.
+    setBuilderLoadFailed(true);
     setSelectedSetId(examSetId);
   };
 
