@@ -43,9 +43,22 @@ export default async function ResultPage({
         .order("sort_order", { ascending: true })
     : { data: [] };
 
-  const { data: review } = await supabase.rpc("get_attempt_review", {
-    p_attempt_id: attemptId,
-  });
+  const [{ data: review }, { data: questionMappings }] = await Promise.all([
+    supabase.rpc("get_attempt_review", { p_attempt_id: attemptId }),
+    supabase
+      .from("exam_set_questions")
+      .select("question_id, points")
+      .eq("exam_set_id", attempt.exam_set_id),
+  ]);
+
+  // Preserve the configured points per question for section-level GPA3 scoring.
+  const pointsByQuestion = new Map(
+    (questionMappings ?? []).map((item) => [item.question_id, Number(item.points ?? 0)])
+  );
+  const reviewWithPoints = (review ?? []).map((row) => ({
+    ...row,
+    points: pointsByQuestion.get(row.question_id) ?? 0,
+  }));
 
   return (
     <ResultView
@@ -56,7 +69,7 @@ export default async function ResultPage({
       passedSections={attempt.passed_sections}
       isGpa3={!!examSet?.is_gpa3}
       sections={sections ?? []}
-      review={review ?? []}
+      review={reviewWithPoints}
       elapsedSeconds={attempt.elapsed_seconds}
     />
   );
