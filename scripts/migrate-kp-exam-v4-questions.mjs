@@ -121,7 +121,7 @@ async function main() {
   const { data: sourceQuestions, error: sourceError } = await source
     .from("questions")
     .select(
-      "id, category_id, question_text, options, correct_answer_index, explanation, difficulty, is_active, source, cat, sub, deleted_at, exam_year_id, category:categories!questions_category_id_fkey(name,is_active)"
+      "id, category_id, question_text, options, correct_answer_index, explanation, difficulty, is_active, source, cat, sub, deleted_at, exam_year_id, table_data, created_at, updated_at, category:categories!questions_category_id_fkey(name,is_active)"
     )
     .order("id", { ascending: true });
 
@@ -151,7 +151,8 @@ async function main() {
   const [
     { data: targetSubcategories, error: subcategoryError },
     { data: targetSections, error: sectionError },
-    { data: targetIds, error: targetIdsError },
+    { data: targetIdConflicts, error: targetIdsError },
+    { count: targetQuestionCount, error: targetCountError },
   ] = await Promise.all([
     target
       .from("subcategories")
@@ -162,15 +163,20 @@ async function main() {
       .select("id, label, subcategory_ids, question_count, max_score, pass_score, sort_order")
       .eq("exam_set_id", targetSet.id)
       .order("sort_order", { ascending: true }),
-    target.from("questions").select("id"),
+    target.from("questions").select("id").in(
+      "id",
+      (sourceQuestions ?? []).map((question) => question.id)
+    ),
+    target.from("questions").select("id", { count: "exact", head: true }),
   ]);
 
   if (subcategoryError) throw new Error(`Target subcategory read failed: ${subcategoryError.message}`);
   if (sectionError) throw new Error(`Target section read failed: ${sectionError.message}`);
   if (targetIdsError) throw new Error(`Target question ID read failed: ${targetIdsError.message}`);
+  if (targetCountError) throw new Error(`Target question count failed: ${targetCountError.message}`);
 
   const targetSubcategorySet = new Set((targetSubcategories ?? []).map((row) => row.id));
-  const targetIdSet = new Set((targetIds ?? []).map((row) => row.id));
+  const targetIdSet = new Set((targetIdConflicts ?? []).map((row) => row.id));
   const errors = [];
   const warnings = [];
   const mappedRows = [];
@@ -202,6 +208,9 @@ async function main() {
         source_id: question.id,
         reason: `ไม่พบ subcategory ปลายทาง ${targetSubcategory}`,
       });
+    }
+    if (question.table_data !== null) {
+      errors.push({ source_id: question.id, reason: "พบ table_data ซึ่งยังไม่มี mapping ไปยัง schema ปลายทาง" });
     }
     if (!question.is_active || question.deleted_at !== null) {
       errors.push({
@@ -270,6 +279,8 @@ async function main() {
       media: [],
       content_format: "plain",
       bloom_level: null,
+      created_at: question.created_at,
+      updated_at: question.updated_at,
     });
   }
 
@@ -371,10 +382,13 @@ async function main() {
       category_inactive_in_source: (sourceQuestions ?? [])
         .filter((question) => question.category?.is_active === false)
         .length,
+      questions_with_table_data: (sourceQuestions ?? [])
+        .filter((question) => question.table_data !== null)
+        .length,
       missing_exam_year: (sourceQuestions ?? []).filter((question) => !question.exam_year_id).length,
     },
     safety: {
-      target_question_rows_before: targetIds?.length ?? 0,
+      target_question_rows_before: targetQuestionCount ?? 0,
       conflicting_source_ids: conflictingIds.length,
       imported_questions_will_be_active: false,
       exam_set_questions_will_be_created: false,
