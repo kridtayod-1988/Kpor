@@ -45,6 +45,7 @@ export default function QuestionsTab() {
   const [questions, setQuestions] = useState<QuestionRow[]>([]);
   const [search, setSearch] = useState("");
   const [filterSub, setFilterSub] = useState("ALL");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -62,6 +63,7 @@ export default function QuestionsTab() {
         .order("created_at", { ascending: false })
         .limit(200);
       if (filterSub !== "ALL") query = query.eq("subcategory_id", filterSub);
+      if (statusFilter !== "ALL") query = query.eq("is_active", statusFilter === "ACTIVE");
       if (search.trim()) query = query.ilike("text", `%${search.trim()}%`);
 
       const { data, error: loadError } = await query;
@@ -101,7 +103,7 @@ export default function QuestionsTab() {
   useEffect(() => {
     void loadQuestions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterSub]);
+  }, [filterSub, statusFilter]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -236,6 +238,16 @@ export default function QuestionsTab() {
           {subcats.map((subcategory) => (
             <option key={subcategory.id} value={subcategory.id}>{subcategory.name}</option>
           ))}
+        </select>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as "ALL" | "ACTIVE" | "INACTIVE")}
+          className="px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+          aria-label="กรองสถานะข้อสอบ"
+        >
+          <option value="ALL">ทุกสถานะ</option>
+          <option value="INACTIVE">รอตรวจ / ยังไม่เปิดใช้</option>
+          <option value="ACTIVE">เปิดใช้งานแล้ว</option>
         </select>
         <button
           type="button"
