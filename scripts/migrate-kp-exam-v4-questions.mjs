@@ -156,7 +156,7 @@ async function main() {
   ] = await Promise.all([
     target
       .from("subcategories")
-      .select("id, name, is_gpa3")
+      .select("id, name, group_id, is_gpa3")
       .in("id", targetSubcategoryIds),
     target
       .from("exam_set_sections")
@@ -176,6 +176,9 @@ async function main() {
   if (targetCountError) throw new Error(`Target question count failed: ${targetCountError.message}`);
 
   const targetSubcategorySet = new Set((targetSubcategories ?? []).map((row) => row.id));
+  const targetSubcategoryById = new Map(
+    (targetSubcategories ?? []).map((row) => [row.id, row])
+  );
   const targetIdSet = new Set((targetIdConflicts ?? []).map((row) => row.id));
   const errors = [];
   const warnings = [];
@@ -208,6 +211,14 @@ async function main() {
         source_id: question.id,
         reason: `ไม่พบ subcategory ปลายทาง ${targetSubcategory}`,
       });
+    } else {
+      const targetSubcategoryRow = targetSubcategoryById.get(targetSubcategory);
+      if (targetSubcategoryRow?.group_id !== "GPA3" || targetSubcategoryRow?.is_gpa3 !== true) {
+        errors.push({
+          source_id: question.id,
+          reason: `subcategory ${targetSubcategory} ไม่ได้อยู่ใน GPA3 หรือ is_gpa3 ไม่เป็น true`,
+        });
+      }
     }
     if (question.table_data !== null) {
       errors.push({ source_id: question.id, reason: "พบ table_data ซึ่งยังไม่มี mapping ไปยัง schema ปลายทาง" });
