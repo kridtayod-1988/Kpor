@@ -12,6 +12,7 @@ type QuestionRow = {
   correct_index: number | null;
   explanation: string;
   source_round: string;
+  is_active: boolean;
 };
 
 type QuestionForm = {
@@ -23,6 +24,7 @@ type QuestionForm = {
   choice_3: string;
   correct_index: number;
   explanation: string;
+  is_active: boolean;
 };
 
 const EMPTY_FORM: QuestionForm = {
@@ -34,6 +36,7 @@ const EMPTY_FORM: QuestionForm = {
   choice_3: "",
   correct_index: 0,
   explanation: "",
+  is_active: true,
 };
 
 export default function QuestionsTab() {
@@ -155,6 +158,7 @@ export default function QuestionsTab() {
       choice_3: choices[3] ?? "",
       correct_index: question.correct_index ?? 0,
       explanation: question.explanation ?? "",
+      is_active: question.is_active,
     });
     setEditingId(question.id);
     setShowForm(true);
@@ -180,6 +184,10 @@ export default function QuestionsTab() {
       setError("กรุณากรอกหมวดวิชา โจทย์ ตัวเลือกทั้ง 4 ข้อ และคำอธิบายเฉลยให้ครบ");
       return;
     }
+    if (form.is_active && form.explanation.includes("ยังไม่มีคำอธิบาย")) {
+      setError("ยังเปิดใช้ข้อสอบไม่ได้ กรุณาเขียนคำอธิบายเฉลยใหม่ก่อน");
+      return;
+    }
 
     setSaving(true);
     const payload = {
@@ -188,6 +196,7 @@ export default function QuestionsTab() {
       choices,
       correct_index: form.correct_index,
       explanation: form.explanation.trim(),
+      is_active: form.is_active,
     };
 
     const result = editingId
@@ -298,6 +307,20 @@ export default function QuestionsTab() {
             className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
             required
           />
+          <label className="flex items-start gap-2 rounded-lg border border-gray-200 p-3 text-sm">
+            <input
+              type="checkbox"
+              checked={form.is_active}
+              onChange={(e) => setForm((current) => ({ ...current, is_active: e.target.checked }))}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="block font-semibold text-gray-800">เปิดใช้ข้อสอบ</span>
+              <span className="block text-xs text-gray-500 mt-0.5">
+                เปิดใช้ได้เมื่อโจทย์ ตัวเลือก คำตอบ และคำอธิบายเฉลยผ่านการตรวจแล้วเท่านั้น
+              </span>
+            </span>
+          </label>
           {error && <p className="text-xs text-red-600">{error}</p>}
           <div className="flex gap-2">
             <button
@@ -328,9 +351,14 @@ export default function QuestionsTab() {
           {questions.map((question) => (
             <div key={question.id} className="bg-white border border-gray-200 rounded-xl px-4 py-3 flex items-start gap-3">
               <div className="flex-1 min-w-0">
-                <div className="text-xs text-gray-400 mb-1">
-                  {subcats.find((subcategory) => subcategory.id === question.subcategory_id)?.name ?? question.subcategory_id}
-                  {" · "}{question.source_round}
+                <div className="flex items-center gap-2 flex-wrap text-xs text-gray-400 mb-1">
+                  <span>
+                    {subcats.find((subcategory) => subcategory.id === question.subcategory_id)?.name ?? question.subcategory_id}
+                    {" · "}{question.source_round}
+                  </span>
+                  <span className={`px-2 py-0.5 rounded-full font-semibold ${question.is_active ? "bg-green-50 text-green-700" : "bg-amber-50 text-amber-700"}`}>
+                    {question.is_active ? "เปิดใช้" : "รอตรวจ"}
+                  </span>
                 </div>
                 <div className="text-sm text-gray-900 font-medium">{question.text}</div>
               </div>
