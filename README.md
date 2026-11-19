@@ -93,6 +93,26 @@ https://<your-domain>/auth/callback
 - เพิ่ม UX สำหรับสร้างสำเนาข้อสอบใหม่แทนการแก้ข้อสอบที่มีประวัติการสอบ และตรวจสอบ Auth redirect, rate limiting และ audit logging
 - ทดสอบ RLS และ RPC ทุกบทบาทด้วยบัญชีผู้ใช้จริงใน staging
 
+
+## แผนย้ายข้อสอบจาก kp-exam-v4
+
+รายงานตรวจสอบฉบับเต็ม: [docs/kp-exam-v4-migration-assessment.md](docs/kp-exam-v4-migration-assessment.md)
+
+- Mapping ที่ตรวจสอบได้: GPA_MATH 24 ข้อ, GPA_THAI 26 ข้อ, GPA_ENG 25 ข้อ และ GPA_LAW 25 ข้อ
+- โจทย์ 100 ข้อมีตัวเลือก 4 ตัวและดัชนีคำตอบถูกต้อง แต่คำอธิบายเฉลยทั้ง 100 ข้อยังเป็น placeholder จึงต้องนำเข้าเป็น `is_active=false`
+- มี 4 แถวที่ใช้ข้อความโจทย์เดียวกัน แต่ตัวเลือกแตกต่างกัน; ไม่มี exact duplicate ของโจทย์+ตัวเลือก+คำตอบ
+- ไม่ย้ายผู้ใช้หรือ Attempt เดิมจากต้นทาง เพราะ user/attempt schema คนละระบบ
+- เพิ่ม `scripts/migrate-kp-exam-v4-questions.mjs` ให้ Dry Run เป็นค่าเริ่มต้น; `--apply-bank` จะเพิ่มเฉพาะคำถาม inactive และไม่ผูกเข้าชุดสอบหรือเผยแพร่
+- ตั้งค่า `SUPABASE_SOURCE_URL`, `SUPABASE_SOURCE_SERVICE_ROLE_KEY`, `SUPABASE_TARGET_URL`, `SUPABASE_TARGET_SERVICE_ROLE_KEY` ในเครื่องเท่านั้น ห้าม commit secret และห้ามใช้ prefix `NEXT_PUBLIC_`
+
+ตัวอย่างคำสั่ง:
+```bash
+node scripts/migrate-kp-exam-v4-questions.mjs
+node scripts/migrate-kp-exam-v4-questions.mjs --apply-bank
+```
+
+หลังการนำเข้าคลังแบบ inactive ต้องตรวจคำอธิบายเฉลยใน Admin → Questions ให้ครบก่อนเปิดใช้ จากนั้นซ่อนชุด `GPA3001`, จัดคำถามผ่าน Exam Set Builder, ทดสอบ staging และค่อยเผยแพร่
+
 ## Local development
 
 ```bash
