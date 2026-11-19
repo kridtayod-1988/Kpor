@@ -37,6 +37,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Validate migration script syntax
+        run: node --check scripts/migrate-kp-exam-v4-questions.mjs
+
       - name: TypeScript
         run: npx tsc --noEmit
 
