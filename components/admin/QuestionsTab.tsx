@@ -43,6 +43,7 @@ export default function QuestionsTab() {
   const supabase = createClient();
   const [subcats, setSubcats] = useState<Subcategory[]>([]);
   const [questions, setQuestions] = useState<QuestionRow[]>([]);
+  const [reviewStats, setReviewStats] = useState({ pending: 0, missingExplanation: 0, active: 0 });
   const [search, setSearch] = useState("");
   const [filterSub, setFilterSub] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "INACTIVE">("ALL");
@@ -68,7 +69,29 @@ export default function QuestionsTab() {
 
       const { data, error: loadError } = await query;
       if (loadError) throw loadError;
+
+      // Keep the overview independent of the status filter so admins can see
+      // the full review workload even while viewing only one status.
+      const countQuery = () => {
+        let count = supabase.from("questions").select("id", { count: "exact", head: true });
+        if (filterSub !== "ALL") count = count.eq("subcategory_id", filterSub);
+        if (search.trim()) count = count.ilike("text", `%${search.trim()}%`);
+        return count;
+      };
+      const [pendingResult, missingResult, activeResult] = await Promise.all([
+        countQuery().eq("is_active", false),
+        countQuery().eq("is_active", false).ilike("explanation", "%ยังไม่มีคำอธิบาย%"),
+        countQuery().eq("is_active", true),
+      ]);
+      const countError = pendingResult.error ?? missingResult.error ?? activeResult.error;
+      if (countError) throw countError;
+
       setQuestions((data as QuestionRow[]) ?? []);
+      setReviewStats({
+        pending: pendingResult.count ?? 0,
+        missingExplanation: missingResult.count ?? 0,
+        active: activeResult.count ?? 0,
+      });
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "โหลดคลังข้อสอบไม่สำเร็จ");
       setQuestions([]);
@@ -217,6 +240,21 @@ export default function QuestionsTab() {
 
   return (
     <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <div className="text-xs text-amber-700">รอตรวจทั้งหมด</div>
+          <div className="text-2xl font-bold text-amber-900">{reviewStats.pending}</div>
+        </div>
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <div className="text-xs text-red-700">ยังไม่มีคำอธิบายเฉลย</div>
+          <div className="text-2xl font-bold text-red-900">{reviewStats.missingExplanation}</div>
+        </div>
+        <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3">
+          <div className="text-xs text-green-700">เปิดใช้งานแล้ว</div>
+          <div className="text-2xl font-bold text-green-900">{reviewStats.active}</div>
+        </div>
+      </div>
+
       <div className="flex flex-wrap gap-2.5 items-center">
         <form onSubmit={handleSearch} className="flex-1 min-w-[200px] flex gap-2">
           <input
@@ -355,6 +393,12 @@ export default function QuestionsTab() {
       )}
 
       {error && !showForm && <p className="text-xs text-red-600">{error}</p>}
+
+      {!loading && reviewStats.pending > 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          แนวทางตรวจข้อสอบ: เปิดข้อที่รอตรวจทีละข้อ ตรวจโจทย์ ตัวเลือก และตำแหน่งคำตอบให้ตรงต้นฉบับ จากนั้นเขียนคำอธิบายเฉลยด้วยเหตุผลที่ตรวจสอบได้ แล้วจึงเลือก “เปิดใช้ข้อสอบ”
+        </div>
+      )}
 
       {loading ? (
         <div className="text-sm text-gray-400 py-10 text-center">กำลังโหลด...</div>
