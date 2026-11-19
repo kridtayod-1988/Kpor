@@ -2,25 +2,44 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import ResultView from "@/components/ResultView";
 
-export default async function ResultPage({ params }: { params: { attemptId: string } }) {
-  const supabase = createClient();
+type AttemptReviewRow = {
+  question_id: string;
+  subcategory_id: string;
+  text: string;
+  passage: string | null;
+  choices: string[];
+  correct_index: number;
+  explanation: string;
+  selected_index: number | null;
+  is_flagged: boolean;
+  is_correct: boolean | null;
+};
+
+export default async function ResultPage({
+  params,
+}: {
+  params: Promise<{ attemptId: string }>;
+}) {
+  const { attemptId } = await params;
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
   if (!user) redirect("/login");
 
   const { data: attempt } = await supabase
     .from("user_attempts")
     .select("*")
-    .eq("id", params.attemptId)
+    .eq("id", attemptId)
     .eq("user_id", user.id)
     .single();
 
   if (!attempt) redirect("/exam-sets");
 
-  // ยังไม่ได้ส่งข้อสอบ -> กลับไปหน้าสอบต่อ
+  // An unfinished attempt must be resumed using its attempt ID.
   if (!attempt.finished_at) {
-    redirect(`/exam/${attempt.exam_set_id}?attempt=${attempt.id}`);
+    redirect(`/exam/${attempt.id}`);
   }
 
   const { data: examSet } = await supabase
@@ -37,9 +56,24 @@ export default async function ResultPage({ params }: { params: { attemptId: stri
         .order("sort_order", { ascending: true })
     : { data: [] };
 
-  const { data: review } = await supabase.rpc("get_attempt_review", {
-    p_attempt_id: params.attemptId,
-  });
+  const [{ data: review }, { data: questionMappings }] = await Promise.all([
+    supabase.rpc("get_attempt_review", { p_attempt_id: attemptId }),
+    supabase
+      .from("exam_set_questions")
+      .select("question_id, points")
+      .eq("exam_set_id", attempt.exam_set_id),
+  ]);
+
+  // Preserve the configured points per question for section-level GPA3 scoring.
+  const pointsByQuestion = new Map<string, number>();
+  for (const item of questionMappings ?? []) {
+    pointsByQuestion.set(item.question_id, Number(item.points ?? 0));
+  }
+  const reviewRows = (review ?? []) as AttemptReviewRow[];
+  const reviewWithPoints = reviewRows.map((row) => ({
+    ...row,
+    points: pointsByQuestion.get(row.question_id) ?? 0,
+  }));
 
   return (
     <ResultView
@@ -50,7 +84,7 @@ export default async function ResultPage({ params }: { params: { attemptId: stri
       passedSections={attempt.passed_sections}
       isGpa3={!!examSet?.is_gpa3}
       sections={sections ?? []}
-      review={review ?? []}
+      review={reviewWithPoints}
       elapsedSeconds={attempt.elapsed_seconds}
     />
   );

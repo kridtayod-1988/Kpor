@@ -7,9 +7,9 @@ type Subcategory = { id: string; name: string; group_id: string };
 type GeneratedQuestion = { text: string; choices: string[]; correct_index: number; explanation: string };
 
 const SOURCE_MODES = [
-  { key: "article", label: "📄 บทความ" },
-  { key: "topic", label: "💡 หัวข้อ" },
-  { key: "google_sheet", label: "📊 Google Sheet" },
+  { key: "article", label: "📄 บทความ", disabled: false },
+  { key: "topic", label: "💡 หัวข้อ", disabled: false },
+  { key: "google_sheet", label: "📊 Google Sheet (เร็ว ๆ นี้)", disabled: true },
 ];
 
 export default function AIGeneratorTab() {
@@ -124,7 +124,9 @@ export default function AIGeneratorTab() {
               <button
                 key={m.key}
                 onClick={() => setSourceMode(m.key)}
-                className="px-3.5 py-1.5 rounded-full text-sm font-semibold"
+                disabled={m.disabled}
+                title={m.disabled ? "ยังไม่เชื่อมต่อ Google Sheets" : undefined}
+                className="px-3.5 py-1.5 rounded-full text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{
                   background: sourceMode === m.key ? "#4f46e5" : "#f3f4f6",
                   color: sourceMode === m.key ? "#fff" : "#6b7280",

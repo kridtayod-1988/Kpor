@@ -35,12 +35,13 @@ export default function ConfirmStartModal({
   const handleConfirm = () => {
     setError(null);
     startTransition(async () => {
-      const res = await startAttemptAction(examSet.id, examSet.mode);
-      if (res?.error) {
+      const res = await startAttemptAction(examSet.id);
+      if (!res.success) {
         setError(res.error);
         return;
       }
-      router.push(`/exam/${examSet.id}?attempt=${res.attemptId}`);
+      // The dynamic route is keyed by the attempt ID, not by the exam-set ID.
+      router.push(`/exam/${res.attemptId}`);
     });
   };
 

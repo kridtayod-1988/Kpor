@@ -3,41 +3,58 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 
-export async function acceptTermsAction(termsVersionId: string) {
-  const supabase = createClient();
+type ActionResult<T = Record<never, never>> =
+  | ({ success: true; error?: never } & T)
+  | { success?: false; error: string };
+
+export async function acceptTermsAction(termsVersionId: string): Promise<ActionResult> {
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) return { error: "ไม่พบผู้ใช้ที่เข้าสู่ระบบ" };
+  if (!termsVersionId) return { error: "ไม่พบข้อกำหนดที่ต้องการยอมรับ" };
 
   const { error } = await supabase
     .from("terms_acceptance")
     .insert({ user_id: user.id, terms_version_id: termsVersionId });
 
-  if (error) return { error: error.message };
+  // ยอมรับข้อกำหนดเดิมซ้ำได้โดยไม่ทำให้หน้าใช้งานล้มเหลว
+  if (error && error.code !== "23505") return { error: error.message };
 
   revalidatePath("/", "layout");
   return { success: true };
 }
 
-export async function startAttemptAction(examSetId: string, mode: string) {
-  const supabase = createClient();
+/**
+ * Create an attempt through the database function.
+ *
+ * start_attempt validates that the set is published, enforces verification
+ * requirements, and creates the attempt atomically. Do not insert directly
+ * into user_attempts from the browser/server action.
+ */
+export async function startAttemptAction(
+  examSetId: string
+): Promise<ActionResult<{ attemptId: string }>> {
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) return { error: "กรุณาเข้าสู่ระบบก่อนเริ่มทำข้อสอบ" };
+  if (!examSetId) return { error: "ไม่พบชุดข้อสอบที่ต้องการเริ่ม" };
 
-  const { data, error } = await supabase
-    .from("user_attempts")
-    .insert({ user_id: user.id, exam_set_id: examSetId, mode })
-    .select("id")
-    .single();
+  const { data: attemptId, error } = await supabase.rpc("start_attempt", {
+    p_exam_set_id: examSetId,
+  });
 
   if (error) return { error: error.message };
+  if (typeof attemptId !== "string" || !attemptId) {
+    return { error: "ระบบไม่สามารถสร้างรหัสการสอบได้ กรุณาลองใหม่" };
+  }
 
-  return { success: true, attemptId: data.id };
+  return { success: true, attemptId };
 }
 
 export async function saveAnswerAction(
@@ -45,8 +62,8 @@ export async function saveAnswerAction(
   questionId: string,
   selectedIndex: number | null,
   isFlagged: boolean
-) {
-  const supabase = createClient();
+): Promise<ActionResult> {
+  const supabase = await createClient();
   const { error } = await supabase.rpc("upsert_answer", {
     p_attempt_id: attemptId,
     p_question_id: questionId,
@@ -57,24 +74,34 @@ export async function saveAnswerAction(
   return { success: true };
 }
 
-export async function submitAttemptAction(attemptId: string) {
-  const supabase = createClient();
+export async function submitAttemptAction(
+  attemptId: string
+): Promise<ActionResult<{ result: unknown }>> {
+  const supabase = await createClient();
   const { data, error } = await supabase.rpc("submit_attempt", {
     p_attempt_id: attemptId,
   });
   if (error) return { error: error.message };
-  // supabase-js คืนค่า RPC ที่เป็น `returns table` เป็น array ของแถวเดียว
+  // supabase-js returns a single-row RETURNS TABLE result as an array.
   const result = Array.isArray(data) ? data[0] : data;
   return { success: true, result };
 }
 
-export async function revealAnswerAction(questionId: string, attemptId: string) {
-  const supabase = createClient();
+export async function revealAnswerAction(
+  questionId: string,
+  attemptId: string
+): Promise<ActionResult<{ correctIndex: number; explanation: string }>> {
+  const supabase = await createClient();
   const { data, error } = await supabase.rpc("reveal_question_answer", {
     p_question_id: questionId,
     p_attempt_id: attemptId,
   });
   if (error) return { error: error.message };
   const row = Array.isArray(data) ? data[0] : data;
-  return { success: true, correctIndex: row?.correct_index as number, explanation: row?.explanation as string };
+  if (!row) return { error: "ไม่พบเฉลยของข้อนี้" };
+  return {
+    success: true,
+    correctIndex: row.correct_index as number,
+    explanation: row.explanation as string,
+  };
 }

@@ -4,7 +4,7 @@ import ModeCard from "@/components/ModeCard";
 import { MODES } from "@/lib/data/modes";
 
 export default async function HomePage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
